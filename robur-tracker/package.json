@@ -1,0 +1,16 @@
+{
+  "name": "robur-technology-a-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Live intraday performance estimator for Swedbank Robur Technology A, based on its publicly disclosed top holdings.",
+  "scripts": {
+    "dev": "wrangler pages dev . --compatibility-date=2024-09-23",
+    "deploy": "wrangler pages deploy . --project-name=robur-technology-a-tracker"
+  },
+  "dependencies": {
+    "unpdf": "^0.12.1"
+  },
+  "devDependencies": {
+    "wrangler": "^3.90.0"
+  }
+}
