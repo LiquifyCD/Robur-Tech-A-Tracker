@@ -61,10 +61,16 @@ js/
   cache.js                      localStorage wrapper with TTL + stale-read support
 
 functions/api/
-  holdings.js    Cloudflare Pages Function: fetches + PDF-parses the fund's
-                 public factsheet, resolves names → tickers, edge-caches 12h
+  holdings.js    Handler logic: fetches + PDF-parses the fund's public
+                 factsheet, resolves names → tickers, edge-caches 12h
   quotes.js      Proxies Yahoo Finance per-symbol, edge-caches 10s
   fx.js          Proxies Frankfurter (ECB rates), edge-caches 1h
+
+src/index.js
+  Worker entry point — routes /api/holdings, /api/quotes, /api/fx to the
+  handlers above and falls through to the static assets binding (public/)
+  for everything else. See the file's own header comment for why this
+  exists instead of relying on functions/ file-based routing directly.
 ```
 
 Data flow: `app.js` → `holdings.js` (portfolio) + `marketData.js` (prices) +
@@ -93,24 +99,33 @@ home-screen icon.
 
 ## Deploying it yourself (I can't push this live for you)
 
-I don't have access to your Cloudflare account, so here's the fastest path —
-about 2 minutes either way:
+This project is a **Workers project with static assets** (see
+`wrangler.jsonc`: `main: src/index.js` + an `assets` binding pointing at
+`public/`) — not a classic Cloudflare Pages project. It used to be plain
+Pages Functions, but that only works when the project is deployed *as a
+Pages project*; a plain Worker deploy ignores the `functions/` folder
+entirely, which caused `/api/holdings` and `/api/quotes` to 404. `src/index.js`
+now manually routes those three `/api/*` paths to the same handler logic
+that still lives in `functions/api/*.js`.
 
-### Option A — Cloudflare dashboard + GitHub (no CLI needed)
-1. Push this folder to a new GitHub repo.
-2. In the Cloudflare dashboard: **Workers & Pages → Create → Pages → Connect
-   to Git** → pick the repo.
-3. Build settings: **Framework preset: None**, **Build command: (leave
-   empty)**, **Build output directory: `/`**. Cloudflare will detect
-   `package.json` and install `unpdf` automatically for the Functions.
-4. Deploy. Your app will be live at `<project>.pages.dev`.
-
-### Option B — Wrangler CLI
+### Option A — Wrangler CLI (recommended)
 ```bash
 npm install
 npx wrangler login
 npm run deploy
 ```
+This deploys the Worker (static assets + API routes together) in one step.
+Your app will be live at `<project-name>.<your-subdomain>.workers.dev`.
+
+### Option B — Cloudflare dashboard + GitHub
+1. Push this folder to a GitHub repo.
+2. In the Cloudflare dashboard: **Workers & Pages → Create → Workers →
+   Connect to Git** (not "Pages" — this project's config is Worker-style,
+   so the Pages Git-integration flow won't pick up `wrangler.jsonc`'s
+   `main`/`assets` settings correctly).
+3. Point it at this repo/folder. Cloudflare will detect `package.json` and
+   `wrangler.jsonc` and install `unpdf` automatically.
+4. Deploy.
 
 ### Local dev
 ```bash
