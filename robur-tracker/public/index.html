@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Robur Technology A · Live-uppskattning</title>
+  <meta name="description" content="Realtidsuppskattning av Swedbank Robur Technology A baserat på fondens offentliggjorda innehav." />
+  <meta name="theme-color" content="#0b1020" />
+
+  <!-- PWA: lets "Add to Home Screen" launch as a standalone app (no address bar / search bar) -->
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" href="./icon-192.png" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Robur Tech A" />
+  <meta name="mobile-web-app-capable" content="yes" />
+
+  <link rel="stylesheet" href="./css/styles.css" />
+</head>
+<body>
+  <div id="app-root" aria-busy="true">
+
+    <header class="app-header">
+      <div class="header-title">
+        <h1>Swedbank Robur Technology A</h1>
+        <p class="subtitle">Live-uppskattning av dagens utveckling</p>
+      </div>
+      <div class="live-indicator">
+        <span id="live-dot" class="live-dot"></span>
+        <span id="live-label">Laddar…</span>
+      </div>
+    </header>
+
+    <div id="error-banner" class="error-banner" hidden role="alert"></div>
+
+    <main id="content" hidden>
+
+      <section class="card headline-card">
+        <div id="market-status" class="market-status">Kontrollerar marknadsstatus…</div>
+        <div id="headline-change" class="headline-change neutral">--%</div>
+        <p id="coverage-note" class="coverage-note">Baserat på fondens offentliggjorda innehav</p>
+      </section>
+
+      <section class="card chart-card">
+        <h2 class="card-title">Intradagsutveckling (uppskattad)</h2>
+        <canvas id="intraday-chart" class="intraday-chart" role="img" aria-label="Diagram över uppskattad utveckling under dagen"></canvas>
+      </section>
+
+      <section class="card contributors-card">
+        <h2 class="card-title">Största bidragsgivare idag</h2>
+        <div class="contributors-columns">
+          <div class="contributors-column">
+            <h3 class="contributors-heading positive">Vinnare</h3>
+            <ul id="gainers-list" class="contributors-list"></ul>
+          </div>
+          <div class="contributors-column">
+            <h3 class="contributors-heading negative">Förlorare</h3>
+            <ul id="losers-list" class="contributors-list"></ul>
+          </div>
+        </div>
+      </section>
+
+      <footer class="app-footer">
+        <p id="holdings-date-note" class="footer-note">Innehav: laddar…</p>
+        <p id="last-update" class="footer-note">Senast uppdaterad: --</p>
+        <p class="disclaimer">
+          Uppskattning baserad på fondens offentliggjorda toppinnehav (ej hela portföljen) och
+          marknadsdata från tredje part. Ingen rådgivning, ingen garanti för korrekthet. Den
+          officiella NAV-kursen från fondbolaget gäller alltid.
+        </p>
+      </footer>
+
+    </main>
+  </div>
+
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
