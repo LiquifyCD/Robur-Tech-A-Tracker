@@ -46,7 +46,7 @@ body {
   padding-top: calc(16px + env(safe-area-inset-top, 0px));
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 22px;
 }
 
 /* ==========================================================================
@@ -282,7 +282,7 @@ body {
    iPhone 13 / larger phones (390–430px) — a bit more breathing room
    ========================================================================== */
 @media (min-width: 390px) {
-  #app-root { padding: 20px; padding-top: calc(20px + env(safe-area-inset-top, 0px)); gap: 16px; }
+  #app-root { padding: 20px; padding-top: calc(20px + env(safe-area-inset-top, 0px)); gap: 24px; }
   .headline-change { font-size: 3.2rem; }
   .card { padding: 20px; }
 }
