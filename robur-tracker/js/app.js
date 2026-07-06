@@ -17,17 +17,11 @@
 import { getHoldings, scheduleBackgroundRefresh } from './holdings.js';
 import { getQuotes, isMarketOpen } from './marketData.js';
 import { getRates } from './exchangeRates.js';
-import { computeFundEstimate, computeEstimatedValue } from './calculator.js';
+import { computeFundEstimate } from './calculator.js';
 import * as ui from './ui.js';
 
 const REFRESH_INTERVAL_MS = 15 * 1000;
 const MAX_BACKOFF_MS = 5 * 60 * 1000;
-
-// Placeholder last-official-NAV. In a future iteration this should come
-// from its own small server-side fetch (the same factsheet endpoint
-// exposes it) - kept simple here since NAV updates once/day and isn't
-// the focus of this iteration.
-const FALLBACK_LAST_NAV_SEK = 1882.71;
 
 let state = {
   holdingsPayload: null,
@@ -49,12 +43,9 @@ async function refreshCycle() {
     const { rates, stale: ratesStale } = await getRates(usedCurrencies);
 
     const result = computeFundEstimate(holdings, quotes, rates);
-    const estimatedValue = computeEstimatedValue(FALLBACK_LAST_NAV_SEK, result.estimatedChangePct);
 
     ui.renderEstimate({
       estimatedChangePct: result.estimatedChangePct,
-      estimatedValue,
-      lastNav: FALLBACK_LAST_NAV_SEK,
       coveragePct: result.coveragePct,
     });
     ui.renderGainersLosers(result);
@@ -75,6 +66,8 @@ async function refreshCycle() {
     console.error('[app] refresh cycle failed', err);
     ui.showErrorBanner('Livedata är tillfälligt otillgänglig - visar senaste tillgängliga uppskattning.');
     ui.renderLiveIndicator(false);
+    ui.renderMarketStatus(false);
+    ui.renderLastUpdate(new Date());
     state.consecutiveFailures += 1;
   }
 
@@ -117,25 +110,33 @@ function handleVisibilityChange() {
 async function init() {
   ui.setLoading(true);
 
-  const { payload, stale, error } = await getHoldings();
-  state.holdingsPayload = payload;
-  ui.renderHoldingsMeta({ asOfDate: payload.asOfDate, source: payload.source, stale });
-  if (stale && error) {
-    ui.showErrorBanner(`Kunde inte hämta senaste innehav (${error}). Använder cachad data.`);
+  try {
+    const { payload, stale, error } = await getHoldings();
+    state.holdingsPayload = payload;
+    ui.renderHoldingsMeta({ asOfDate: payload.asOfDate, source: payload.source, stale });
+    if (stale && error) {
+      ui.showErrorBanner(`Kunde inte hämta senaste innehav (${error}). Använder cachad data.`);
+    }
+
+    ui.setLoading(false);
+
+    if (!document.hidden) {
+      startPolling();
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    scheduleBackgroundRefresh((result) => {
+      state.holdingsPayload = result.payload;
+      ui.renderHoldingsMeta({ asOfDate: result.payload.asOfDate, source: result.payload.source, stale: result.stale });
+    });
+  } catch (err) {
+    // Whatever went wrong, never leave the user staring at an infinite
+    // skeleton - surface it and stop.
+    console.error('[app] init failed', err);
+    ui.setLoading(false);
+    ui.showFatalError(`Appen kunde inte starta: ${err.message}`);
   }
-
-  ui.setLoading(false);
-
-  if (!document.hidden) {
-    startPolling();
-  }
-
-  document.addEventListener('visibilitychange', handleVisibilityChange);
-
-  scheduleBackgroundRefresh((result) => {
-    state.holdingsPayload = result.payload;
-    ui.renderHoldingsMeta({ asOfDate: result.payload.asOfDate, source: result.payload.source, stale: result.stale });
-  });
 }
 
 document.addEventListener('DOMContentLoaded', init);

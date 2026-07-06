@@ -36,7 +36,9 @@ function chunk(arr, size) {
  * @returns {Promise<Object<string, object>>} map of symbol -> quote
  */
 async function fetchBatch(symbols) {
-  const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`);
+  const res = await fetch(`/api/quotes?symbols=${encodeURIComponent(symbols.join(','))}`, {
+    signal: AbortSignal.timeout(12000),
+  });
   if (!res.ok) throw new Error(`Quotes request failed: ${res.status}`);
   const data = await res.json();
   return data.quotes || {};

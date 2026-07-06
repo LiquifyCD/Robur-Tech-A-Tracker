@@ -15,9 +15,6 @@ const el = (id) => document.getElementById(id);
 const fmtPct = (v, digits = 2) =>
   `${v > 0 ? '+' : ''}${v.toFixed(digits)}%`;
 
-const fmtSEK = (v) =>
-  new Intl.NumberFormat('sv-SE', { style: 'currency', currency: 'SEK', maximumFractionDigits: 2 }).format(v);
-
 const fmtTime = (date) =>
   new Intl.DateTimeFormat('sv-SE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }).format(date);
 
@@ -28,19 +25,11 @@ function setChangeClasses(elem, value) {
   else elem.classList.add('neutral');
 }
 
-/** Headline estimated % change + estimated value + NAV diff. */
-export function renderEstimate({ estimatedChangePct, estimatedValue, lastNav, coveragePct }) {
+/** Headline estimated % change for the day. */
+export function renderEstimate({ estimatedChangePct, coveragePct }) {
   const headline = el('headline-change');
   headline.textContent = fmtPct(estimatedChangePct);
   setChangeClasses(headline, estimatedChangePct);
-
-  el('estimated-value').textContent = fmtSEK(estimatedValue);
-  el('official-nav').textContent = fmtSEK(lastNav);
-
-  const diff = estimatedValue - lastNav;
-  const diffEl = el('nav-diff');
-  diffEl.textContent = `${diff > 0 ? '+' : ''}${fmtSEK(diff)}`;
-  setChangeClasses(diffEl, diff);
 
   el('coverage-note').textContent = `Baserat på innehav som representerar ${coveragePct.toFixed(0)}% av portföljen`;
 }

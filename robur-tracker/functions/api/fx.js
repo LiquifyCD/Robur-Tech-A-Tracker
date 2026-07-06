@@ -30,7 +30,7 @@ export async function onRequestGet({ request }) {
     const upstreamUrl = `https://api.frankfurter.dev/v1/latest?base=${encodeURIComponent(base)}${
       symbols ? `&symbols=${encodeURIComponent(symbols)}` : ''
     }`;
-    const upstreamRes = await fetch(upstreamUrl);
+    const upstreamRes = await fetch(upstreamUrl, { signal: AbortSignal.timeout(8000) });
     if (!upstreamRes.ok) {
       return jsonError(`Upstream FX provider returned ${upstreamRes.status}`, 502);
     }

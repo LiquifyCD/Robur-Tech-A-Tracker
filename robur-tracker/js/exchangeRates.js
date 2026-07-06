@@ -42,7 +42,7 @@ export async function getRates(currencies) {
       base: BASE_CURRENCY,
       symbols: uniqueCurrencies.join(','),
     });
-    const res = await fetch(`/api/fx?${params.toString()}`);
+    const res = await fetch(`/api/fx?${params.toString()}`, { signal: AbortSignal.timeout(10000) });
     if (!res.ok) throw new Error(`FX request failed: ${res.status}`);
     const data = await res.json();
 

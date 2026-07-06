@@ -95,6 +95,7 @@ export async function onRequestGet({ request }) {
   try {
     const pdfRes = await fetch(FACTSHEET_URL, {
       headers: { Accept: 'application/pdf' },
+      signal: AbortSignal.timeout(15000),
     });
     if (!pdfRes.ok) throw new Error(`Factsheet fetch failed: ${pdfRes.status}`);
 

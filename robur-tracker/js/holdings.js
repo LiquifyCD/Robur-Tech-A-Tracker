@@ -86,7 +86,10 @@ function buildPayload(raw, source) {
  * Ask our serverless function for the latest disclosed holdings.
  */
 async function fetchFromServer() {
-  const res = await fetch(`/api/holdings?isin=${FUND_ISIN}`, { headers: { Accept: 'application/json' } });
+  const res = await fetch(`/api/holdings?isin=${FUND_ISIN}`, {
+    headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(12000),
+  });
   if (!res.ok) throw new Error(`Holdings request failed: ${res.status}`);
   const data = await res.json();
   if (!Array.isArray(data.holdings) || data.holdings.length === 0) {
