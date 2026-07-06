@@ -45,6 +45,9 @@ direction, not for anything transactional.
 ```
 index.html            Mobile-first UI shell
 css/styles.css         Dark theme, CSS variables, responsive layout
+manifest.json          Web app manifest — enables standalone (no browser
+                        chrome) launch when added to a phone's home screen
+icons/                 App icons used by manifest.json and iOS home-screen
 
 js/
   app.js               Orchestration: polling loop, visibility handling,
@@ -62,8 +65,6 @@ functions/api/
                  public factsheet, resolves names → tickers, edge-caches 12h
   quotes.js      Proxies Yahoo Finance per-symbol, edge-caches 10s
   fx.js          Proxies Frankfurter (ECB rates), edge-caches 1h
-
-package.json     Declares the `unpdf` dependency used by functions/api/holdings.js
 ```
 
 Data flow: `app.js` → `holdings.js` (portfolio) + `marketData.js` (prices) +
@@ -71,6 +72,22 @@ Data flow: `app.js` → `holdings.js` (portfolio) + `marketData.js` (prices) +
 (render). Nothing is hardcoded except the ticker-resolution lookup table
 described above — holdings, weights, prices, and FX all come from live
 fetches with cache fallbacks.
+
+---
+
+## Installing it on your phone (standalone mode)
+
+`manifest.json` + the iOS meta tags in `index.html` mean that when you add
+the page to your Home Screen, it opens as its own app — no address bar, no
+Safari search bar, no browser chrome.
+
+- **iPhone (Safari):** open the site → Share → **Add to Home Screen**.
+- **Android (Chrome):** open the site → ⋮ menu → **Add to Home screen** /
+  **Install app**.
+
+If you skip this step and just bookmark the page instead, the browser UI
+will still show — standalone mode only kicks in once it's launched from the
+home-screen icon.
 
 ---
 
@@ -136,8 +153,7 @@ The module boundaries were drawn with the roadmap in mind:
 - **Historical estimated performance** — `chart.js` already timestamps
   every point; swap its `sessionStorage` backing for `localStorage` (or a
   Cloudflare KV-backed endpoint) to persist across days.
-- **PWA install** — add a `manifest.json` + a minimal service worker;
-  the app has no build step to complicate this.
+- **PWA install** — done — see "Installing it on your phone" above.
 - **Dark mode / configurable refresh** — `styles.css` already isolates
   every color in `:root` variables; `app.js`'s `REFRESH_INTERVAL_MS` is a
   single constant to expose as a user setting.
