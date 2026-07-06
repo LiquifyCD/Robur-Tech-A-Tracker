@@ -41,6 +41,7 @@ body {
   max-width: 560px;
   margin: 0 auto;
   padding: 16px;
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -283,9 +284,106 @@ body {
 }
 
 /* ==========================================================================
-   Small screens fine-tuning
+   Small screens fine-tuning (compact phones)
    ========================================================================== */
 @media (max-width: 360px) {
   .headline-change { font-size: 2.4rem; }
   .contributors-columns { gap: 10px; }
+}
+
+/* ==========================================================================
+   iPhone 13 / larger phones (390–430px) — a bit more breathing room
+   ========================================================================== */
+@media (min-width: 390px) {
+  #app-root { padding: 20px; padding-top: calc(20px + env(safe-area-inset-top, 0px)); gap: 16px; }
+  .headline-change { font-size: 3.2rem; }
+  .card { padding: 20px; }
+}
+
+/* ==========================================================================
+   Tablet / small laptop — content still single column but roomier
+   ========================================================================== */
+@media (min-width: 768px) {
+  #app-root { max-width: 640px; }
+}
+
+/* ==========================================================================
+   Desktop — dashboard layout: sticky headline rail + scrolling detail column
+   ========================================================================== */
+@media (min-width: 1024px) {
+  #app-root {
+    max-width: 1040px;
+    padding: 32px;
+    gap: 20px;
+  }
+
+  .app-header { padding: 0 0 4px; }
+  .header-title h1 { font-size: 1.3rem; }
+  .subtitle { font-size: 0.9rem; }
+
+  #content {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    grid-template-areas:
+      "headline chart"
+      "headline contributors"
+      "footer    footer";
+    align-items: start;
+    gap: 24px;
+  }
+
+  .headline-card {
+    grid-area: headline;
+    position: sticky;
+    top: 32px;
+    padding: 32px 24px;
+  }
+
+  .headline-change { font-size: 3.6rem; }
+
+  .chart-card { grid-area: chart; }
+  .contributors-card { grid-area: contributors; }
+
+  .app-footer { grid-area: footer; padding: 8px 2px 32px; }
+
+  .intraday-chart { height: 220px; }
+}
+
+/* ==========================================================================
+   Large desktop / 1440p monitors — more air, larger type, wider chart
+   ========================================================================== */
+@media (min-width: 1440px) {
+  #app-root {
+    max-width: 1280px;
+    padding: 48px;
+    gap: 24px;
+  }
+
+  .header-title h1 { font-size: 1.5rem; }
+  .subtitle { font-size: 0.95rem; }
+
+  #content {
+    grid-template-columns: 400px 1fr;
+    gap: 28px;
+  }
+
+  .headline-card { padding: 40px 28px; top: 48px; }
+  .headline-change { font-size: 4.2rem; }
+  .coverage-note { font-size: 0.85rem; }
+
+  .card { padding: 28px; }
+  .card-title { font-size: 0.9rem; }
+
+  .intraday-chart { height: 280px; }
+
+  .contributor-row { font-size: 0.9rem; }
+  .disclaimer { font-size: 0.75rem; }
+}
+
+/* Respect reduced motion preference across breakpoints */
+@media (prefers-reduced-motion: reduce) {
+  .live-dot.live-active,
+  .skeleton-block {
+    animation: none;
+  }
 }
