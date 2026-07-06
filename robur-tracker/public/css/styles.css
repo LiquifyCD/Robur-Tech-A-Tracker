@@ -49,6 +49,12 @@ body {
   gap: 22px;
 }
 
+#content {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
 /* ==========================================================================
    Header
    ========================================================================== */
@@ -283,6 +289,7 @@ body {
    ========================================================================== */
 @media (min-width: 390px) {
   #app-root { padding: 20px; padding-top: calc(20px + env(safe-area-inset-top, 0px)); gap: 24px; }
+  #content { gap: 24px; }
   .headline-change { font-size: 3.2rem; }
   .card { padding: 20px; }
 }
