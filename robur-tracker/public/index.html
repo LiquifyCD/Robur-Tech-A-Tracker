@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Fondkoll – följ och jämför fonder</title>
   <meta name="description" content="Sök, följ och jämför fonder med tydliga källor, uppdateringstider och datakvalitet.">
-  <meta name="theme-color" content="#f6f8f4">
-  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f6f8f4" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1512" media="(prefers-color-scheme: dark)">
+  <meta name="color-scheme" content="light dark">
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="/apple-touch-icon.png">
@@ -20,13 +21,6 @@
 
   <div class="app-shell">
     <header class="topbar">
-      <a class="brand" href="/" aria-label="Fondkoll startsida">
-        <span class="brand-mark" aria-hidden="true">F</span>
-        <span>
-          <strong>Fondkoll</strong>
-          <small>Fonder utan dimridåer</small>
-        </span>
-      </a>
       <button id="open-search" class="search-trigger" type="button" aria-haspopup="dialog">
         <span aria-hidden="true">⌕</span>
         <span>Sök fond, symbol eller ISIN</span>

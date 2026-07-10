@@ -12,6 +12,8 @@ Fondkoll is a Swedish-language, mobile-first fund tracker for finding, following
 - Compare up to three funds on a normalized percentage scale.
 - Continue to show explicitly stale cached fund data when the provider is unavailable.
 - Install the responsive web app on iPhone, iPad, Android, or desktop.
+- Follow the device's light or dark appearance automatically, including matching browser theme colors and chart contrast.
+- Respect iPhone notch and Home Screen safe areas without placing content behind fixed navigation.
 - Navigate with keyboard landmarks, focus indicators, a skip link, live status messages, and reduced-motion support.
 
 ## Accuracy model

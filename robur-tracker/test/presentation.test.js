@@ -29,7 +29,16 @@ test('UI contract includes responsive navigation, safe areas, landmarks, and red
   assert.match(html, /role="status" aria-live="polite"/);
   assert.match(css, /@media \(max-width: 760px\)/);
   assert.match(css, /env\(safe-area-inset-bottom\)/);
+  assert.match(css, /env\(safe-area-inset-top\)/);
+  assert.match(css, /--topbar-height: calc\(60px \+ env\(safe-area-inset-top\)\)/);
+  assert.match(css, /padding: calc\(var\(--topbar-height\) \+ 20px\)/);
   assert.match(css, /prefers-reduced-motion/);
+  assert.match(css, /prefers-color-scheme: dark/);
+  assert.match(html, /content="light dark"/);
+  assert.match(html, /theme-color[^>]+prefers-color-scheme: dark/);
+  assert.doesNotMatch(html, /class="brand(?:-mark)?"/);
+  assert.match(css, /\.icon-button \{[^}]*min-height: 44px/s);
+  assert.match(css, /\.segmented-control button \{[^}]*height: 44px/s);
 });
 
 test('PWA and worker security contracts remain wired', async () => {

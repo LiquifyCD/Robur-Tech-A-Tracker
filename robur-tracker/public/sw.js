@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fondkoll-shell-v2';
+const CACHE_NAME = 'fondkoll-shell-v3';
 const APP_SHELL = ['/', '/css/styles.css', '/js/app.js', '/js/fundApi.js', '/js/fundStore.js', '/js/format.js', '/js/chart.js', '/icon.svg', '/manifest.json'];
 
 self.addEventListener('install', (event) => {

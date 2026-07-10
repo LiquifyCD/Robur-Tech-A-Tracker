@@ -9,7 +9,7 @@ import {
   setCurrentFund,
   toggleFavorite,
 } from './fundStore.js';
-import { chartColors, normaliseSeries, renderChart } from './chart.js';
+import { getChartColors, normaliseSeries, renderChart } from './chart.js';
 import { formatDate, formatPercent, formatValue, freshnessLabel, rangeLabel } from './format.js';
 
 const DEFAULT_FUND = {
@@ -146,6 +146,7 @@ function renderFund(result) {
   el('period-low').textContent = formatValue(data.period.low, data.fund.currency);
   el('period-points').textContent = new Intl.NumberFormat('sv-SE').format(data.period.points);
   el('chart-summary').textContent = `${data.fund.name} förändrades ${formatPercent(data.period.changePct)} under ${rangeLabel(state.range)}, från ${formatValue(data.period.startValue, data.fund.currency)} till ${formatValue(data.period.endValue, data.fund.currency)}.`;
+  const chartColors = getChartColors();
   renderChart(el('fund-chart'), [{ name: data.fund.name, points: data.history, color: chartColors[0] }]);
 
   const favorite = isFavorite(data.fund.symbol);
@@ -238,6 +239,7 @@ async function renderComparison() {
     .map((result, index) => result.status === 'fulfilled' ? { saved: funds[index], ...result.value.data } : null)
     .filter(Boolean);
 
+  const chartColors = getChartColors();
   const series = state.compareResults.map((result, index) => ({
     name: result.fund.name,
     points: normaliseSeries(result.history),
@@ -263,6 +265,7 @@ function renderCompareLegend(series) {
 
 function renderCompareCards(results) {
   const container = el('compare-list');
+  const chartColors = getChartColors();
   container.replaceChildren();
   results.forEach((result, index) => {
     const card = document.createElement('article');
@@ -357,8 +360,14 @@ function bindEvents() {
   window.addEventListener('resize', () => {
     if (state.view === 'overview' && state.fundResult) renderFund(state.fundResult);
     if (state.view === 'compare' && state.compareResults.length) {
+      const chartColors = getChartColors();
       renderChart(el('compare-chart'), state.compareResults.map((result, index) => ({ name: result.fund.name, points: normaliseSeries(result.history), color: chartColors[index] })), { percent: true });
     }
+  });
+  const colorScheme = window.matchMedia('(prefers-color-scheme: dark)');
+  colorScheme.addEventListener?.('change', () => {
+    if (state.view === 'overview' && state.fundResult) renderFund(state.fundResult);
+    if (state.view === 'compare') renderComparison();
   });
   window.addEventListener('online', () => { setConnection('Ansluten', 'ready'); if (state.current) loadFund(state.current, { forceRefresh: true }); });
   window.addEventListener('offline', () => setConnection('Offline', 'warning'));
