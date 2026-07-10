@@ -115,6 +115,58 @@
             </aside>
           </section>
 
+          <section id="contributors-section" class="card contributors-card" aria-labelledby="contributors-title">
+            <div class="card-header contributors-header">
+              <div>
+                <p class="section-kicker">Portföljens dagsbidrag</p>
+                <h2 id="contributors-title">Dagens vinnare och förlorare</h2>
+                <p class="section-intro">Visar hur de redovisade toppinnehaven uppskattas ha påverkat fonden i dag.</p>
+              </div>
+              <span id="contributors-status" class="quality-badge">Hämtar data</span>
+            </div>
+
+            <div id="contributors-loading" class="contributors-loading" role="status" aria-live="polite">
+              <span class="mini-spinner" aria-hidden="true"></span> Hämtar innehav och dagskurser…
+            </div>
+            <div id="contributors-unavailable" class="notice contributors-notice" role="status" hidden></div>
+
+            <div id="contributors-content" hidden>
+              <dl class="contribution-summary" aria-label="Sammanfattning av dagsbidrag">
+                <div><dt>Positiva bidrag</dt><dd id="positive-contribution" class="positive">–</dd></div>
+                <div><dt>Negativa bidrag</dt><dd id="negative-contribution" class="negative">–</dd></div>
+                <div><dt>Netto, toppinnehav</dt><dd id="net-contribution">–</dd></div>
+              </dl>
+
+              <div class="contributors-meta">
+                <span id="contributors-coverage">–</span>
+                <span id="contributors-updated">–</span>
+                <span id="contributors-source">–</span>
+              </div>
+
+              <div class="contributor-columns">
+                <section aria-labelledby="winners-title">
+                  <div class="contributor-list-title"><span aria-hidden="true">↗</span><h3 id="winners-title">Dagens vinnare</h3></div>
+                  <div id="winners-list" class="contributor-list"></div>
+                </section>
+                <section aria-labelledby="losers-title">
+                  <div class="contributor-list-title is-negative"><span aria-hidden="true">↘</span><h3 id="losers-title">Dagens förlorare</h3></div>
+                  <div id="losers-list" class="contributor-list"></div>
+                </section>
+              </div>
+
+              <section id="unavailable-holdings" class="unavailable-holdings" aria-labelledby="unavailable-title" hidden>
+                <h3 id="unavailable-title">Innehav utan användbar dagsdata</h3>
+                <div id="unavailable-list" class="contributor-list"></div>
+              </section>
+
+              <aside class="contribution-explainer">
+                <strong>Så räknas bidraget</strong>
+                <p>Prisförändring är aktiens förändring i dag. Fondvikt är innehavets redovisade andel av fonden. Bidrag i procentenheter = prisförändring × fondvikt / 100. Exempel: +4 % × 10 % = +0,40 pp.</p>
+                <p>Detta är en uppskattning för redovisade toppinnehav, inte fondens officiella dagsavkastning. Valuta, handelstider, avgifter och övriga innehav kan ge en annan utveckling.</p>
+              </aside>
+            </div>
+          </section>
+
           <section class="card performance-card" aria-labelledby="performance-title">
             <div class="card-header">
               <div>

@@ -7,6 +7,7 @@ Fondkoll is a Swedish-language, mobile-first fund tracker for finding, following
 - Search by fund name, provider symbol, or ISIN when the provider recognises it.
 - Open shareable fund URLs such as `/?fund=0P00000LCG.ST`.
 - View the latest reported daily value, value date, currency, source, delay state, and freshness state.
+- See which disclosed top holdings contributed most positively and negatively during the day, including each holding's day move, fund weight, contribution in percentage points, data time, and missing-data state.
 - Explore 1 month, 3 months, year-to-date, 1 year, 5 years, or the maximum available history.
 - Save a local watchlist without an account.
 - Compare up to three funds on a normalized percentage scale.
@@ -26,7 +27,7 @@ Fondkoll deliberately separates three concepts:
 
 Weekend and market-holiday gaps are expected for daily funds. Data is marked stale when the latest real observation is more than 120 hours old. A previously cached response is clearly labelled if a refresh fails.
 
-The previous top-holdings intraday estimate was removed from the primary experience. It normalized a partial portfolio, could not correctly represent undisclosed holdings or same-day currency movement, and depended on a brittle cookie/crumb handshake. Reported daily fund values are less immediate but materially more defensible.
+The holdings contribution panel is deliberately secondary to the reported fund value. It estimates only the impact of disclosed top holdings using `day change % × fund weight % / 100`. It does not claim to reproduce official NAV: undisclosed holdings, currency movement, differing market hours, fees, and stale quotes can all create differences. Coverage, timestamps, delayed data, and unavailable holdings are shown rather than silently omitted.
 
 ## Data provider and licensing assessment
 
@@ -39,7 +40,7 @@ Yahoo's published API terms restrict automated collection outside expressly perm
 - filters results to mutual funds;
 - caches search and history responses at the edge for 15 minutes;
 - identifies the source and its unofficial status in both API responses and the interface;
-- does not scrape HTML, bypass authentication, or perform cookie/crumb circumvention;
+- does not scrape HTML or use user credentials; the holdings endpoint does require Yahoo's public session cookie/crumb handshake and is therefore more brittle than the chart endpoint;
 - recommends a licensed market-data agreement before public, commercial, or high-volume production use.
 
 Review the current [Yahoo API terms](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apitnc/index.html) before deployment. A production owner remains responsible for confirming that their use and jurisdiction are permitted.
@@ -64,6 +65,7 @@ public/
 functions/api/
   funds.js               Validated mutual-fund discovery endpoint
   fund.js                Validated historical fund-value endpoint and parser
+  contributors.js        Top-holdings weights, daily quotes, contribution calculation
 
 src/index.js             Worker routing, static assets, and security headers
 test/                    Data, calculation, date/currency, PWA, and UI contracts
@@ -83,6 +85,10 @@ Returns up to 12 mutual-fund matches. Empty queries return a small featured list
 Returns normalized fund metadata, last reported value, period statistics, actual history points, and source metadata. Allowed ranges are `1mo`, `3mo`, `6mo`, `ytd`, `1y`, `2y`, `5y`, `10y`, and `max`. Symbols are validated against a restricted character set.
 
 Errors use JSON and do not expose secrets. Successful upstream responses are edge-cached for 15 minutes with a stale-if-error allowance.
+
+### `GET /api/contributors?symbol=<symbol>`
+
+Returns disclosed top holdings with normalized percentage weights, daily price movement, estimated contribution in percentage points, positive/negative/net summaries, coverage, source, and timestamps. A weight supplied as either `0.10` or `10` is normalized to 10%. Missing or stale holding quotes remain explicit in the response. Holdings metadata is cached for 12 hours and the calculated response for 15 minutes.
 
 ## Local development
 
@@ -116,6 +122,7 @@ The automated suite covers:
 - stale-date classification;
 - Swedish date, percentage, and currency presentation;
 - normalized comparison series;
+- holding-weight normalization, contribution arithmetic, sorting, coverage, and missing-data preservation;
 - mutual-fund-only search normalization and deduplication;
 - responsive navigation, iPhone safe-area, reduced-motion, PWA, and security-header contracts.
 
@@ -144,7 +151,7 @@ Deployment changes external state and is intentionally not part of verification.
 
 - A single unlicensed/undocumented provider remains the largest reliability and legal-risk constraint.
 - ISIN is displayed only when known locally; provider search may resolve an ISIN without returning it in the result metadata.
-- Fees, risk score, benchmark, holdings, sectors, regions, and official fund-company documents are not shown because the current source does not provide them under a reliable, documented contract.
+- Top holdings may be shown when the unofficial provider supplies them, but full portfolios, sectors, regions, fees, risk scores, benchmarks, and official documents still require a licensed or official source.
 - Comparisons do not yet align share classes by fee, accumulation policy, hedging, or benchmark.
 - “Any fund” means any mutual fund covered by the configured provider, not every registered fund worldwide.
 

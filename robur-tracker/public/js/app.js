@@ -1,4 +1,4 @@
-import { getFund, searchFunds } from './fundApi.js';
+import { getContributors, getFund, searchFunds } from './fundApi.js';
 import {
   addToComparison,
   getComparison,
@@ -10,7 +10,7 @@ import {
   toggleFavorite,
 } from './fundStore.js';
 import { getChartColors, normaliseSeries, renderChart } from './chart.js';
-import { formatDate, formatPercent, formatValue, freshnessLabel, rangeLabel } from './format.js';
+import { formatDate, formatDateTime, formatPctPoints, formatPercent, formatUnsignedPercent, formatValue, freshnessLabel, rangeLabel } from './format.js';
 
 const DEFAULT_FUND = {
   symbol: '0P00000LCG.ST',
@@ -27,6 +27,8 @@ const state = {
   current: null,
   fundResult: null,
   compareResults: [],
+  contributorsResult: null,
+  contributorsRequest: 0,
   searchTimer: null,
   toastTimer: null,
 };
@@ -106,6 +108,7 @@ async function loadFund(fund, options = {}) {
     state.current = metadata;
     setCurrentFund(metadata);
     renderFund(result);
+    loadContributors(metadata.symbol, options);
     updateUrl(metadata.symbol);
     setConnection(result.stale || result.data.latest.stale ? 'Visar äldre data' : 'Data hämtad', result.stale ? 'warning' : 'ready');
     if (result.stale) showError('Datakällan svarar inte. En tidigare sparad version visas och kan vara inaktuell.');
@@ -119,6 +122,109 @@ async function loadFund(fund, options = {}) {
     el('fund-loading').hidden = true;
     el('fund-loading').setAttribute('aria-busy', 'false');
   }
+}
+
+async function loadContributors(symbol, options = {}) {
+  const requestId = ++state.contributorsRequest;
+  state.contributorsResult = null;
+  el('contributors-loading').hidden = false;
+  el('contributors-content').hidden = true;
+  el('contributors-unavailable').hidden = true;
+  el('contributors-status').textContent = 'Hämtar data';
+  el('contributors-status').classList.remove('is-stale');
+
+  try {
+    const result = await getContributors(symbol, options);
+    if (requestId !== state.contributorsRequest || state.current?.symbol !== symbol) return;
+    state.contributorsResult = result;
+    renderContributors(result);
+  } catch (error) {
+    if (requestId !== state.contributorsRequest || state.current?.symbol !== symbol) return;
+    el('contributors-unavailable').textContent = `Innehavens dagsbidrag kan inte visas just nu: ${error.message}`;
+    el('contributors-unavailable').hidden = false;
+    el('contributors-status').textContent = 'Data saknas';
+    el('contributors-status').classList.add('is-stale');
+  } finally {
+    if (requestId === state.contributorsRequest) el('contributors-loading').hidden = true;
+  }
+}
+
+function renderContributors(result) {
+  const { data, stale } = result;
+  const delayedItems = data.items.filter((item) => item.status === 'stale').length;
+  const hasWarnings = stale || delayedItems > 0 || data.unavailable.length > 0;
+  el('contributors-content').hidden = false;
+  el('contributors-status').textContent = stale ? 'Äldre cache' : hasWarnings ? 'Delvis data' : 'Data hämtad';
+  el('contributors-status').classList.toggle('is-stale', hasWarnings);
+
+  setContributionValue(el('positive-contribution'), data.summary.positivePctPoints);
+  setContributionValue(el('negative-contribution'), data.summary.negativePctPoints);
+  setContributionValue(el('net-contribution'), data.summary.netPctPoints);
+  el('contributors-coverage').textContent = `Beräknat ${formatUnsignedPercent(data.summary.calculatedCoveragePct)} av fonden · ${data.summary.availableCount}/${data.summary.holdingsCount} toppinnehav`;
+  el('contributors-updated').textContent = `Senaste kurs: ${formatDateTime(data.latestDataAt)}`;
+  el('contributors-source').textContent = `Källa: ${data.source.label} · fördröjd data`;
+
+  renderContributorList(el('winners-list'), data.winners, 'Inga positiva bidrag i tillgänglig dagsdata.');
+  renderContributorList(el('losers-list'), data.losers, 'Inga negativa bidrag i tillgänglig dagsdata.');
+  const unavailableSection = el('unavailable-holdings');
+  unavailableSection.hidden = data.unavailable.length === 0;
+  renderContributorList(el('unavailable-list'), data.unavailable, '', true);
+}
+
+function setContributionValue(element, value) {
+  element.textContent = formatPctPoints(value);
+  element.classList.remove('positive', 'negative', 'neutral');
+  element.classList.add(value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral');
+}
+
+function renderContributorList(container, items, emptyMessage, unavailable = false) {
+  container.replaceChildren();
+  if (!items.length && emptyMessage) {
+    const empty = document.createElement('p');
+    empty.className = 'contributor-empty';
+    empty.textContent = emptyMessage;
+    container.append(empty);
+    return;
+  }
+
+  items.forEach((item) => {
+    const row = document.createElement('article');
+    row.className = `contributor-row${unavailable ? ' is-unavailable' : ''}`;
+    const identity = document.createElement('div');
+    identity.className = 'contributor-identity';
+    const name = document.createElement('strong');
+    name.textContent = item.name;
+    const ticker = document.createElement('span');
+    ticker.textContent = item.resolvedTicker && item.resolvedTicker !== item.ticker
+      ? `${item.ticker} · kurs ${item.resolvedTicker}`
+      : item.ticker;
+    identity.append(name, ticker);
+
+    const metrics = document.createElement('dl');
+    metrics.className = 'contributor-metrics';
+    appendMetric(metrics, 'Dag', unavailable ? 'Saknas' : formatPercent(item.dayChangePct));
+    appendMetric(metrics, 'Fondvikt', formatUnsignedPercent(item.weightPct));
+    appendMetric(metrics, 'Bidrag', unavailable ? 'Ej beräknat' : formatPctPoints(item.contributionPctPoints));
+    row.append(identity, metrics);
+
+    if (item.reason) {
+      const reason = document.createElement('p');
+      reason.className = 'contributor-reason';
+      reason.textContent = item.reason;
+      row.append(reason);
+    }
+    container.append(row);
+  });
+}
+
+function appendMetric(list, label, value) {
+  const wrapper = document.createElement('div');
+  const term = document.createElement('dt');
+  const description = document.createElement('dd');
+  term.textContent = label;
+  description.textContent = value;
+  wrapper.append(term, description);
+  list.append(wrapper);
 }
 
 function renderFund(result) {

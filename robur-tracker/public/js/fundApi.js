@@ -33,3 +33,21 @@ export async function getFund(symbol, range = '1y', options = {}) {
     throw error;
   }
 }
+
+export async function getContributors(symbol, options = {}) {
+  const key = `contributors:${symbol}`;
+  if (!options.forceRefresh) {
+    const fresh = cache.get(key);
+    if (fresh && !fresh.stale) return { data: fresh.value, cached: true, stale: false };
+  }
+
+  try {
+    const data = await requestJson(`/api/contributors?symbol=${encodeURIComponent(symbol)}`);
+    cache.set(key, data, FUND_TTL_MS);
+    return { data, cached: false, stale: false };
+  } catch (error) {
+    const fallback = cache.get(key, { allowStale: true });
+    if (fallback) return { data: fallback.value, cached: true, stale: true, error };
+    throw error;
+  }
+}

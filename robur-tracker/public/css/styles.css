@@ -259,7 +259,7 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .text-button { min-height: 44px; display: inline-flex; align-items: center; margin-top: 10px; padding: 0; border: 0; background: none; color: inherit; font-size: 12px; font-weight: 750; cursor: pointer; }
 .text-button:hover { text-decoration: underline; }
 
-.performance-card, .quality-card { margin-top: 18px; padding: 26px 30px; }
+.performance-card, .quality-card, .contributors-card { margin-top: 18px; padding: 26px 30px; }
 .card-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 24px; }
 .card-header h2, .quality-card h2 { margin: 5px 0 0; font-family: Georgia, serif; font-size: 26px; font-weight: 500; }
 .segmented-control { display: inline-flex; padding: 4px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-soft); }
@@ -274,6 +274,42 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
 .metrics-grid > div:first-child { padding-left: 0; border-left: 0; }
 .metrics-grid dt { color: var(--muted); font-size: 11px; font-weight: 650; }
 .metrics-grid dd { margin: 6px 0 0; font-size: 17px; font-weight: 750; }
+
+.section-intro { max-width: 650px; margin: 7px 0 0; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.contributors-header { align-items: center; }
+.contributors-loading { display: flex; align-items: center; gap: 10px; min-height: 110px; color: var(--muted); font-size: 13px; }
+.contributors-notice { margin: 22px 0 0; border: 1px solid var(--line); background: var(--surface-soft); color: var(--muted); }
+.contribution-summary { display: grid; grid-template-columns: repeat(3, 1fr); margin: 24px 0 0; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+.contribution-summary > div { padding: 17px 19px; background: var(--source-bg); }
+.contribution-summary > div + div { border-left: 1px solid var(--line); }
+.contribution-summary dt { color: var(--muted); font-size: 11px; font-weight: 650; }
+.contribution-summary dd { margin: 6px 0 0; font-size: 20px; font-weight: 800; }
+.contributors-meta { display: flex; flex-wrap: wrap; gap: 7px 18px; margin: 13px 2px 0; color: var(--muted); font-size: 11px; line-height: 1.5; }
+.contributor-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 24px; }
+.contributor-list-title { display: flex; align-items: center; gap: 9px; margin-bottom: 10px; color: var(--positive); }
+.contributor-list-title.is-negative { color: var(--negative); }
+.contributor-list-title span { width: 29px; height: 29px; display: grid; place-items: center; border-radius: 9px; background: var(--positive-soft); font-weight: 800; }
+.contributor-list-title.is-negative span { background: var(--negative-soft); }
+.contributor-list-title h3 { margin: 0; color: var(--ink); font-size: 14px; }
+.contributor-list { display: grid; gap: 8px; }
+.contributor-row { min-width: 0; padding: 14px; border: 1px solid var(--line); border-radius: 13px; background: var(--surface); }
+.contributor-row.is-unavailable { background: var(--surface-soft); }
+.contributor-identity { min-width: 0; }
+.contributor-identity strong, .contributor-identity span { display: block; }
+.contributor-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+.contributor-identity span { margin-top: 3px; color: var(--muted); font-size: 10px; }
+.contributor-metrics { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 12px 0 0; }
+.contributor-metrics div { min-width: 0; }
+.contributor-metrics dt { color: var(--muted); font-size: 9px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+.contributor-metrics dd { margin: 3px 0 0; font-size: 12px; font-weight: 750; white-space: nowrap; }
+.contributor-reason { margin: 10px 0 0; padding-top: 9px; border-top: 1px solid var(--line); color: var(--warning); font-size: 10px; line-height: 1.45; }
+.contributor-empty { margin: 0; padding: 20px 14px; border: 1px dashed var(--line); border-radius: 13px; color: var(--muted); font-size: 12px; }
+.unavailable-holdings { margin-top: 22px; }
+.unavailable-holdings h3 { margin: 0 0 10px; font-size: 13px; }
+.unavailable-holdings .contributor-list { grid-template-columns: repeat(2, 1fr); }
+.contribution-explainer { margin-top: 24px; padding: 17px 19px; border-left: 4px solid var(--brand); border-radius: 0 12px 12px 0; background: var(--brand-soft); }
+.contribution-explainer strong { font-size: 13px; }
+.contribution-explainer p { margin: 6px 0 0; color: var(--muted); font-size: 11px; line-height: 1.55; }
 
 .quality-card { display: grid; grid-template-columns: 240px 1fr; gap: 48px; }
 .quality-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 24px; }
@@ -464,7 +500,7 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
   .source-strip > div { padding-inline: 16px; }
   .source-strip > div:last-child { grid-column: 1 / -1; }
   .trust-card { padding: 22px 20px; }
-  .performance-card, .quality-card { margin-top: 12px; padding: 22px 18px; }
+  .performance-card, .quality-card, .contributors-card { margin-top: 12px; padding: 22px 18px; }
   .card-header { display: block; }
   .segmented-control { width: 100%; margin-top: 16px; overflow: hidden; }
   .segmented-control button { flex: 1 1 44px; padding-inline: 4px; }
@@ -473,6 +509,14 @@ h1, h2, h3, p { overflow-wrap: anywhere; }
   .metrics-grid > div { padding: 16px 10px 4px; border-left: 0; border-top: 1px solid var(--line); }
   .metrics-grid > div:nth-child(odd) { padding-left: 0; }
   .metrics-grid > div:nth-child(even) { border-left: 1px solid var(--line); }
+  .contributors-header { display: flex; align-items: flex-start; }
+  .contributors-header .quality-badge { flex: 0 0 auto; }
+  .contribution-summary { grid-template-columns: 1fr; }
+  .contribution-summary > div { display: flex; align-items: baseline; justify-content: space-between; gap: 14px; padding: 14px 15px; }
+  .contribution-summary > div + div { border-left: 0; border-top: 1px solid var(--line); }
+  .contribution-summary dd { margin: 0; font-size: 17px; }
+  .contributor-columns { grid-template-columns: 1fr; gap: 24px; }
+  .unavailable-holdings .contributor-list { grid-template-columns: 1fr; }
   .quality-grid { grid-template-columns: 1fr; gap: 18px; }
   .page-heading { display: block; }
   .page-heading .primary-button { margin-top: 18px; }

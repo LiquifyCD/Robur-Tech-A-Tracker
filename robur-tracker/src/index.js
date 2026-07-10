@@ -8,6 +8,7 @@
 
 import { onRequestGet as fundHandler } from '../functions/api/fund.js';
 import { onRequestGet as fundsHandler } from '../functions/api/funds.js';
+import { onRequestGet as contributorsHandler } from '../functions/api/contributors.js';
 
 const SECURITY_HEADERS = {
   'Content-Security-Policy':
@@ -26,6 +27,9 @@ export default {
     }
     if (url.pathname === '/api/funds') {
       return fundsHandler({ request, env, ctx });
+    }
+    if (url.pathname === '/api/contributors') {
+      return contributorsHandler({ request, env, ctx });
     }
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {

@@ -1,13 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
-import { formatDate, formatPercent, formatValue, freshnessLabel } from '../public/js/format.js';
+import { formatDate, formatPctPoints, formatPercent, formatUnsignedPercent, formatValue, freshnessLabel } from '../public/js/format.js';
 import { normaliseSeries } from '../public/js/chart.js';
 
 test('currency values and percentages use Swedish presentation without changing the amount', () => {
   assert.match(formatValue(1234.5, 'SEK'), /1\s?234,50 SEK/);
   assert.match(formatPercent(2.345), /^\+2,35/);
   assert.match(formatPercent(-1.2), /1,20/);
+  assert.match(formatPctPoints(0.4), /^\+0,40 pp$/);
+  assert.match(formatUnsignedPercent(10), /^10,00/);
+  assert.doesNotMatch(formatUnsignedPercent(10), /^\+/);
 });
 
 test('ISO dates are presented as valid Swedish dates and invalid input is explicit', () => {
@@ -36,6 +39,11 @@ test('UI contract includes responsive navigation, safe areas, landmarks, and red
   assert.match(css, /prefers-color-scheme: dark/);
   assert.match(html, /content="light dark"/);
   assert.match(html, /theme-color[^>]+prefers-color-scheme: dark/);
+  assert.match(html, /id="contributors-section"/);
+  assert.match(html, /Dagens vinnare/);
+  assert.match(html, /Dagens förlorare/);
+  assert.match(html, /prisförändring × fondvikt \/ 100/i);
+  assert.match(html, /Innehav utan användbar dagsdata/);
   assert.doesNotMatch(html, /class="brand(?:-mark)?"/);
   assert.match(css, /\.icon-button \{[^}]*min-height: 44px/s);
   assert.match(css, /\.segmented-control button \{[^}]*height: 44px/s);
