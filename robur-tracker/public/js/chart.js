@@ -1,131 +1,120 @@
-/**
- * chart.js
- * ---------------------------------------------------------------------------
- * A tiny, dependency-free canvas line chart for the intraday estimated
- * fund value. Deliberately avoids pulling in a charting library to keep
- * the JS bundle minimal (per the "Performance" requirement) - this is
- * ~100 lines and does exactly what this app needs.
- *
- * Points are kept in-memory for the session (sessionStorage-backed so a
- * refresh doesn't lose today's chart). Each point is
- * { t: timestamp, v: estimatedChangePct }.
- * ---------------------------------------------------------------------------
- */
+import { formatPercent, formatShortDate } from './format.js';
 
-const SESSION_KEY = 'robur-tracker:intraday-points';
-const MAX_POINTS = 2000; // ~8 hours at 15s intervals, plenty of headroom
+const SERIES_COLORS = ['#176b52', '#6f5bc7', '#d26a3a'];
 
-let points = loadPoints();
-
-function loadPoints() {
-  try {
-    const raw = window.sessionStorage.getItem(SESSION_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    // Discard points from a previous day so the chart resets daily.
-    const today = new Date().toDateString();
-    return parsed.filter((p) => new Date(p.t).toDateString() === today);
-  } catch (err) {
-    return [];
-  }
+export function normaliseSeries(history) {
+  const first = history.find((point) => Number.isFinite(point.v) && point.v > 0)?.v;
+  if (!first) return [];
+  return history.map((point) => ({ t: point.t, v: ((point.v - first) / first) * 100 }));
 }
 
-function persistPoints() {
-  try {
-    window.sessionStorage.setItem(SESSION_KEY, JSON.stringify(points));
-  } catch (err) {
-    /* ignore - non-critical */
-  }
-}
-
-/**
- * Record a new data point for the intraday chart.
- * @param {number} estimatedChangePct
- */
-export function addPoint(estimatedChangePct) {
-  points.push({ t: Date.now(), v: estimatedChangePct });
-  if (points.length > MAX_POINTS) points.shift();
-  persistPoints();
-}
-
-/**
- * Render the chart into the given canvas element.
- * @param {HTMLCanvasElement} canvas
- */
-export function render(canvas) {
-  if (!canvas || points.length < 2) return;
-
-  const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
+export function renderChart(canvas, series, options = {}) {
+  if (!canvas) return;
+  const usable = series.filter((item) => Array.isArray(item.points) && item.points.length > 0);
   const rect = canvas.getBoundingClientRect();
-  canvas.width = rect.width * dpr;
-  canvas.height = rect.height * dpr;
-  ctx.scale(dpr, dpr);
+  if (!rect.width || !rect.height) return;
 
-  const width = rect.width;
-  const height = rect.height;
-  const padding = 8;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  canvas.width = Math.round(rect.width * dpr);
+  canvas.height = Math.round(rect.height * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, rect.width, rect.height);
 
-  ctx.clearRect(0, 0, width, height);
+  if (!usable.length) {
+    ctx.fillStyle = '#68736b';
+    ctx.font = '14px system-ui';
+    ctx.textAlign = 'center';
+    ctx.fillText('Ingen diagramdata tillgänglig', rect.width / 2, rect.height / 2);
+    return;
+  }
 
-  const values = points.map((p) => p.v);
-  const min = Math.min(0, ...values);
-  const max = Math.max(0, ...values);
-  const range = max - min || 1;
+  const padding = { top: 18, right: 14, bottom: 30, left: 55 };
+  const plotWidth = Math.max(1, rect.width - padding.left - padding.right);
+  const plotHeight = Math.max(1, rect.height - padding.top - padding.bottom);
+  const allPoints = usable.flatMap((item) => item.points);
+  const minT = Math.min(...allPoints.map((point) => point.t));
+  const maxT = Math.max(...allPoints.map((point) => point.t));
+  let minV = Math.min(...allPoints.map((point) => point.v));
+  let maxV = Math.max(...allPoints.map((point) => point.v));
+  if (options.percent) {
+    minV = Math.min(minV, 0);
+    maxV = Math.max(maxV, 0);
+  }
+  const valuePadding = Math.max((maxV - minV) * 0.1, Math.abs(maxV || 1) * 0.02, 0.01);
+  minV -= valuePadding;
+  maxV += valuePadding;
 
-  const xFor = (i) => padding + (i / (points.length - 1)) * (width - padding * 2);
-  const yFor = (v) => height - padding - ((v - min) / range) * (height - padding * 2);
+  const xFor = (t) => padding.left + ((t - minT) / (maxT - minT || 1)) * plotWidth;
+  const yFor = (v) => padding.top + (1 - (v - minV) / (maxV - minV || 1)) * plotHeight;
 
-  // Zero line
-  const styles = getComputedStyle(canvas);
-  const gridColor = styles.getPropertyValue('--chart-grid').trim() || '#33415580';
-  const lineColor =
-    values[values.length - 1] >= 0
-      ? styles.getPropertyValue('--positive').trim() || '#22c55e'
-      : styles.getPropertyValue('--negative').trim() || '#ef4444';
-  const fillColor = lineColor + '26'; // ~15% opacity hex suffix
-
-  ctx.strokeStyle = gridColor;
+  ctx.font = '12px system-ui';
   ctx.lineWidth = 1;
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.moveTo(padding, yFor(0));
-  ctx.lineTo(width - padding, yFor(0));
-  ctx.stroke();
-  ctx.setLineDash([]);
+  ctx.textBaseline = 'middle';
+  for (let i = 0; i <= 4; i += 1) {
+    const value = minV + ((maxV - minV) * i) / 4;
+    const y = yFor(value);
+    ctx.strokeStyle = '#dfe5df';
+    ctx.beginPath();
+    ctx.moveTo(padding.left, y);
+    ctx.lineTo(rect.width - padding.right, y);
+    ctx.stroke();
+    ctx.fillStyle = '#68736b';
+    ctx.textAlign = 'right';
+    ctx.fillText(options.percent ? formatPercent(value, 0) : compactValue(value), padding.left - 9, y);
+  }
 
-  // Filled area under the line
-  ctx.beginPath();
-  ctx.moveTo(xFor(0), yFor(values[0]));
-  values.forEach((v, i) => ctx.lineTo(xFor(i), yFor(v)));
-  ctx.lineTo(xFor(values.length - 1), yFor(0));
-  ctx.lineTo(xFor(0), yFor(0));
-  ctx.closePath();
-  ctx.fillStyle = fillColor;
-  ctx.fill();
+  ctx.textBaseline = 'top';
+  for (let i = 0; i <= 3; i += 1) {
+    const timestamp = minT + ((maxT - minT) * i) / 3;
+    ctx.fillStyle = '#68736b';
+    ctx.textAlign = i === 0 ? 'left' : i === 3 ? 'right' : 'center';
+    ctx.fillText(formatShortDate(timestamp), xFor(timestamp), rect.height - padding.bottom + 10);
+  }
 
-  // The line itself
-  ctx.beginPath();
-  ctx.moveTo(xFor(0), yFor(values[0]));
-  values.forEach((v, i) => ctx.lineTo(xFor(i), yFor(v)));
-  ctx.strokeStyle = lineColor;
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.stroke();
+  usable.forEach((item, index) => {
+    const color = item.color || SERIES_COLORS[index % SERIES_COLORS.length];
+    if (usable.length === 1) {
+      const gradient = ctx.createLinearGradient(0, padding.top, 0, rect.height - padding.bottom);
+      gradient.addColorStop(0, `${color}2e`);
+      gradient.addColorStop(1, `${color}00`);
+      ctx.beginPath();
+      item.points.forEach((point, pointIndex) => {
+        const x = xFor(point.t);
+        const y = yFor(point.v);
+        if (pointIndex === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.lineTo(xFor(item.points.at(-1).t), rect.height - padding.bottom);
+      ctx.lineTo(xFor(item.points[0].t), rect.height - padding.bottom);
+      ctx.closePath();
+      ctx.fillStyle = gradient;
+      ctx.fill();
+    }
 
-  // Current-value dot
-  const lastIdx = values.length - 1;
-  ctx.beginPath();
-  ctx.arc(xFor(lastIdx), yFor(values[lastIdx]), 3.5, 0, Math.PI * 2);
-  ctx.fillStyle = lineColor;
-  ctx.fill();
+    ctx.beginPath();
+    item.points.forEach((point, pointIndex) => {
+      const x = xFor(point.t);
+      const y = yFor(point.v);
+      if (pointIndex === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    });
+    ctx.strokeStyle = color;
+    ctx.lineWidth = usable.length === 1 ? 2.5 : 2;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+    ctx.stroke();
+
+    const last = item.points.at(-1);
+    ctx.beginPath();
+    ctx.arc(xFor(last.t), yFor(last.v), 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  });
 }
 
-export function clear() {
-  points = [];
-  persistPoints();
-}
+export const chartColors = SERIES_COLORS;
 
-export function getPoints() {
-  return points;
+function compactValue(value) {
+  return new Intl.NumberFormat('sv-SE', { maximumFractionDigits: 0, notation: 'compact' }).format(value);
 }

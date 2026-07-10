@@ -1,0 +1,43 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
+import { formatDate, formatPercent, formatValue, freshnessLabel } from '../public/js/format.js';
+import { normaliseSeries } from '../public/js/chart.js';
+
+test('currency values and percentages use Swedish presentation without changing the amount', () => {
+  assert.match(formatValue(1234.5, 'SEK'), /1\s?234,50 SEK/);
+  assert.match(formatPercent(2.345), /^\+2,35/);
+  assert.match(formatPercent(-1.2), /1,20/);
+});
+
+test('ISO dates are presented as valid Swedish dates and invalid input is explicit', () => {
+  assert.match(formatDate('2026-07-08T00:00:00.000Z'), /8 juli 2026/);
+  assert.equal(formatDate('not-a-date'), '–');
+  assert.equal(freshnessLabel(12, false), 'Senaste bankdag');
+  assert.equal(freshnessLabel(130, true), 'Inaktuell data');
+});
+
+test('comparison series start at zero and preserve real observations', () => {
+  assert.deepEqual(normaliseSeries([{ t: 1, v: 50 }, { t: 2, v: 55 }]), [{ t: 1, v: 0 }, { t: 2, v: 10 }]);
+});
+
+test('UI contract includes responsive navigation, safe areas, landmarks, and reduced motion', async () => {
+  const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+  const css = await readFile(new URL('../public/css/styles.css', import.meta.url), 'utf8');
+  assert.match(html, /<nav[^>]+aria-label="Huvudmeny"/);
+  assert.match(html, /<main id="main-content"/);
+  assert.match(html, /role="status" aria-live="polite"/);
+  assert.match(css, /@media \(max-width: 760px\)/);
+  assert.match(css, /env\(safe-area-inset-bottom\)/);
+  assert.match(css, /prefers-reduced-motion/);
+});
+
+test('PWA and worker security contracts remain wired', async () => {
+  const manifest = JSON.parse(await readFile(new URL('../public/manifest.json', import.meta.url), 'utf8'));
+  const worker = await readFile(new URL('../src/index.js', import.meta.url), 'utf8');
+  const serviceWorker = await readFile(new URL('../public/sw.js', import.meta.url), 'utf8');
+  assert.equal(manifest.display, 'standalone');
+  assert.match(worker, /Content-Security-Policy/);
+  assert.match(worker, /X-Content-Type-Options/);
+  assert.match(serviceWorker, /\/api\//);
+});

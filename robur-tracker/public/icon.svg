@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title">
+  <title id="title">Fondkoll</title>
+  <rect width="1024" height="1024" fill="#f6f8f4"/>
+  <rect x="112" y="112" width="800" height="800" rx="210" fill="#176b52"/>
+  <path d="M333 270c0-31 25-56 56-56h322c31 0 56 25 56 56s-25 56-56 56H445v157h207c31 0 56 25 56 56s-25 56-56 56H445v201c0 31-25 56-56 56s-56-25-56-56V270Z" fill="#f6f8f4"/>
+</svg>

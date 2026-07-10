@@ -1,142 +1,384 @@
-/**
- * app.js
- * ---------------------------------------------------------------------------
- * Orchestrates the whole app: loads holdings, polls market data on a timer,
- * runs the calculation, and pushes results to ui.js. This is the only
- * module that should import all the others - it wires them together but
- * contains no fetching/math/DOM logic of its own beyond scheduling.
- *
- * Refresh behaviour (per spec):
- *   - Poll every 15s while the market is open AND the tab is visible.
- *   - Pause immediately on visibilitychange -> hidden, resume on visible.
- *   - On repeated failures, back off exponentially (30s, 60s, 120s...,
- *     capped at 5 min) rather than hammering a struggling API.
- * ---------------------------------------------------------------------------
- */
+import { getFund, searchFunds } from './fundApi.js';
+import {
+  addToComparison,
+  getComparison,
+  getCurrentFund,
+  getFavorites,
+  isFavorite,
+  removeFromComparison,
+  setCurrentFund,
+  toggleFavorite,
+} from './fundStore.js';
+import { chartColors, normaliseSeries, renderChart } from './chart.js';
+import { formatDate, formatPercent, formatValue, freshnessLabel, rangeLabel } from './format.js';
 
-import { getHoldings, scheduleBackgroundRefresh } from './holdings.js';
-import { getQuotes, isMarketOpen } from './marketData.js';
-import { getRates } from './exchangeRates.js';
-import { computeFundEstimate } from './calculator.js';
-import * as ui from './ui.js';
-
-const REFRESH_INTERVAL_MS = 15 * 1000;
-const MAX_BACKOFF_MS = 5 * 60 * 1000;
-
-let state = {
-  holdingsPayload: null,
-  consecutiveFailures: 0,
-  pollTimer: null,
-  isPolling: false,
+const DEFAULT_FUND = {
+  symbol: '0P00000LCG.ST',
+  name: 'Swedbank Robur Technology A',
+  exchange: 'Stockholm',
+  currency: 'SEK',
+  isin: 'SE0000538944',
 };
 
-async function refreshCycle() {
-  if (!state.holdingsPayload) return;
-  const holdings = state.holdingsPayload.holdings;
-  const tickers = holdings.map((h) => h.ticker);
+const state = {
+  view: 'overview',
+  range: '1y',
+  compareRange: '1y',
+  current: null,
+  fundResult: null,
+  compareResults: [],
+  searchTimer: null,
+  toastTimer: null,
+};
+
+const el = (id) => document.getElementById(id);
+
+function announce(message) {
+  el('app-status').textContent = message;
+}
+
+function setConnection(label, mode = 'ready') {
+  const status = el('connection-status');
+  status.dataset.mode = mode;
+  status.querySelector('span:last-child').textContent = label;
+}
+
+function showError(message) {
+  el('error-banner').textContent = message;
+  el('error-banner').hidden = false;
+}
+
+function clearError() {
+  el('error-banner').hidden = true;
+}
+
+function showToast(message) {
+  const toast = el('toast');
+  clearTimeout(state.toastTimer);
+  toast.textContent = message;
+  toast.hidden = false;
+  state.toastTimer = setTimeout(() => { toast.hidden = true; }, 3200);
+}
+
+function setView(view) {
+  state.view = view;
+  document.querySelectorAll('[data-view-panel]').forEach((panel) => {
+    panel.hidden = panel.dataset.viewPanel !== view;
+  });
+  document.querySelectorAll('[data-view]').forEach((button) => {
+    const active = button.dataset.view === view;
+    button.classList.toggle('is-active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  if (view === 'compare') renderComparison();
+  if (view === 'saved') renderSaved();
+  el('main-content').focus({ preventScroll: true });
+}
+
+function getRequestedFund() {
+  const symbol = new URL(location.href).searchParams.get('fund');
+  if (symbol) return { ...DEFAULT_FUND, symbol, name: symbol, isin: symbol === DEFAULT_FUND.symbol ? DEFAULT_FUND.isin : null };
+  return getCurrentFund() || DEFAULT_FUND;
+}
+
+async function loadFund(fund, options = {}) {
+  state.current = { ...fund };
+  setCurrentFund(state.current);
+  el('fund-loading').hidden = false;
+  el('fund-loading').setAttribute('aria-busy', 'true');
+  el('fund-content').hidden = true;
+  clearError();
+  setConnection('Hämtar data', 'loading');
+  announce(`Hämtar ${fund.name || fund.symbol}`);
 
   try {
-    const { quotes, allStale } = await getQuotes(tickers);
-    const usedCurrencies = Object.values(quotes)
-      .map((q) => q.currency)
-      .filter(Boolean);
-    const { rates, stale: ratesStale } = await getRates(usedCurrencies);
-
-    const result = computeFundEstimate(holdings, quotes, rates);
-
-    ui.renderEstimate({
-      estimatedChangePct: result.estimatedChangePct,
-      coveragePct: result.coveragePct,
-    });
-    ui.renderGainersLosers(result);
-    ui.addChartPoint(result.estimatedChangePct);
-    ui.renderChart();
-    ui.renderMarketStatus(isMarketOpen(quotes));
-    ui.renderLastUpdate(new Date());
-    ui.renderLiveIndicator(true);
-
-    if (allStale || ratesStale) {
-      ui.showErrorBanner('Livedata är tillfälligt otillgänglig - visar senaste tillgängliga uppskattning.');
-      state.consecutiveFailures += 1;
-    } else {
-      ui.hideErrorBanner();
-      state.consecutiveFailures = 0;
-    }
-  } catch (err) {
-    console.error('[app] refresh cycle failed', err);
-    ui.showErrorBanner('Livedata är tillfälligt otillgänglig - visar senaste tillgängliga uppskattning.');
-    ui.renderLiveIndicator(false);
-    ui.renderMarketStatus(false);
-    ui.renderLastUpdate(new Date());
-    state.consecutiveFailures += 1;
+    const result = await getFund(fund.symbol, state.range, options);
+    state.fundResult = result;
+    const metadata = {
+      ...fund,
+      symbol: result.data.fund.symbol,
+      name: result.data.fund.name,
+      currency: result.data.fund.currency,
+      exchange: result.data.fund.exchange,
+      isin: fund.isin || (result.data.fund.symbol === DEFAULT_FUND.symbol ? DEFAULT_FUND.isin : null),
+    };
+    state.current = metadata;
+    setCurrentFund(metadata);
+    renderFund(result);
+    updateUrl(metadata.symbol);
+    setConnection(result.stale || result.data.latest.stale ? 'Visar äldre data' : 'Data hämtad', result.stale ? 'warning' : 'ready');
+    if (result.stale) showError('Datakällan svarar inte. En tidigare sparad version visas och kan vara inaktuell.');
+    announce(`${metadata.name} har laddats`);
+  } catch (error) {
+    console.error(error);
+    showError(`Fonden kunde inte laddas: ${error.message}`);
+    setConnection('Data saknas', 'error');
+    announce('Fonddata kunde inte laddas');
+  } finally {
+    el('fund-loading').hidden = true;
+    el('fund-loading').setAttribute('aria-busy', 'false');
   }
-
-  scheduleNextRefresh();
 }
 
-function currentIntervalMs() {
-  if (state.consecutiveFailures === 0) return REFRESH_INTERVAL_MS;
-  const backoff = REFRESH_INTERVAL_MS * 2 ** state.consecutiveFailures;
-  return Math.min(backoff, MAX_BACKOFF_MS);
+function renderFund(result) {
+  const { data, stale: cachedStale } = result;
+  const stale = cachedStale || data.latest.stale;
+  el('fund-content').hidden = false;
+  el('fund-name').textContent = data.fund.name;
+  el('fund-symbol').textContent = data.fund.symbol;
+  el('fund-exchange').textContent = data.fund.exchange || 'Okänd marknadsplats';
+  el('fund-type').textContent = data.fund.instrumentType === 'MUTUALFUND' ? 'Fond' : data.fund.instrumentType;
+  el('fund-freshness').textContent = freshnessLabel(data.latest.ageHours, stale);
+  el('fund-freshness').classList.toggle('is-stale', stale);
+  el('fund-isin-wrap').hidden = !state.current.isin;
+  el('fund-isin').textContent = state.current.isin || '';
+
+  el('latest-value').textContent = formatValue(data.latest.value, null);
+  el('latest-currency').textContent = data.fund.currency || '';
+  setChange(el('daily-change'), data.latest.dayChangePct);
+  el('value-date').textContent = formatDate(data.latest.asOf);
+  el('value-source').textContent = data.source.label;
+  el('value-status').textContent = stale ? 'Inaktuell / cache' : 'Rapporterad, fördröjd';
+
+  setChange(el('period-return'), data.period.changePct, true);
+  el('period-high').textContent = formatValue(data.period.high, data.fund.currency);
+  el('period-low').textContent = formatValue(data.period.low, data.fund.currency);
+  el('period-points').textContent = new Intl.NumberFormat('sv-SE').format(data.period.points);
+  el('chart-summary').textContent = `${data.fund.name} förändrades ${formatPercent(data.period.changePct)} under ${rangeLabel(state.range)}, från ${formatValue(data.period.startValue, data.fund.currency)} till ${formatValue(data.period.endValue, data.fund.currency)}.`;
+  renderChart(el('fund-chart'), [{ name: data.fund.name, points: data.history, color: chartColors[0] }]);
+
+  const favorite = isFavorite(data.fund.symbol);
+  el('favorite-button').setAttribute('aria-pressed', String(favorite));
+  el('favorite-button').querySelector('[aria-hidden]').textContent = favorite ? '♥' : '♡';
+  el('favorite-button').querySelector('.button-label').textContent = favorite ? 'Sparad' : 'Spara';
+  updateCounts();
 }
 
-function scheduleNextRefresh() {
-  clearTimeout(state.pollTimer);
-  if (!state.isPolling) return;
-  state.pollTimer = setTimeout(refreshCycle, currentIntervalMs());
+function setChange(element, value, plain = false) {
+  element.textContent = formatPercent(value);
+  element.classList.remove('positive', 'negative', 'neutral');
+  element.classList.add(value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral');
+  if (!plain) element.setAttribute('aria-label', `Förändring ${formatPercent(value)}`);
 }
 
-function startPolling() {
-  if (state.isPolling) return;
-  state.isPolling = true;
-  ui.renderLiveIndicator(true);
-  refreshCycle(); // fire immediately, then the timer takes over
+function updateUrl(symbol) {
+  const url = new URL(location.href);
+  url.searchParams.set('fund', symbol);
+  history.replaceState({ fund: symbol }, '', url);
 }
 
-function stopPolling() {
-  state.isPolling = false;
-  clearTimeout(state.pollTimer);
-  ui.renderLiveIndicator(false);
+function updateCounts() {
+  const count = getComparison().length;
+  el('compare-count').textContent = count;
+  el('compare-count').hidden = count === 0;
 }
 
-function handleVisibilityChange() {
-  if (document.hidden) {
-    stopPolling();
-  } else {
-    startPolling();
+function openSearch() {
+  const dialog = el('search-dialog');
+  if (!dialog.open) dialog.showModal();
+  el('fund-search').focus();
+  if (!el('search-results').children.length) runSearch('');
+}
+
+async function runSearch(query) {
+  el('search-spinner').hidden = false;
+  el('search-help').textContent = query ? `Söker efter ”${query}”` : 'Utvalda fonder';
+  try {
+    const { funds, error } = await searchFunds(query);
+    renderSearchResults(funds || []);
+    el('search-help').textContent = error || (funds?.length ? `${funds.length} fonder hittades` : 'Inga fonder hittades. Prova ett annat namn, symbol eller ISIN.');
+  } catch (error) {
+    renderSearchResults([]);
+    el('search-help').textContent = `Sökningen misslyckades: ${error.message}`;
+  } finally {
+    el('search-spinner').hidden = true;
+  }
+}
+
+function renderSearchResults(funds) {
+  const container = el('search-results');
+  container.replaceChildren();
+  funds.forEach((fund) => {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'search-result';
+    button.setAttribute('role', 'option');
+    const main = document.createElement('span');
+    main.className = 'search-result-main';
+    const name = document.createElement('strong');
+    name.textContent = fund.name;
+    const meta = document.createElement('span');
+    meta.textContent = [fund.isin, fund.symbol, fund.exchange].filter(Boolean).join(' · ');
+    const arrow = document.createElement('span');
+    arrow.className = 'search-result-arrow';
+    arrow.setAttribute('aria-hidden', 'true');
+    arrow.textContent = '→';
+    main.append(name, meta);
+    button.append(main, arrow);
+    button.addEventListener('click', () => {
+      el('search-dialog').close();
+      setView('overview');
+      loadFund(fund);
+    });
+    container.append(button);
+  });
+}
+
+async function renderComparison() {
+  const funds = getComparison();
+  updateCounts();
+  el('compare-empty').hidden = funds.length > 0;
+  el('compare-content').hidden = funds.length === 0;
+  if (!funds.length) return;
+
+  announce('Hämtar jämförelsedata');
+  const settled = await Promise.allSettled(funds.map((fund) => getFund(fund.symbol, state.compareRange)));
+  state.compareResults = settled
+    .map((result, index) => result.status === 'fulfilled' ? { saved: funds[index], ...result.value.data } : null)
+    .filter(Boolean);
+
+  const series = state.compareResults.map((result, index) => ({
+    name: result.fund.name,
+    points: normaliseSeries(result.history),
+    color: chartColors[index],
+  }));
+  renderChart(el('compare-chart'), series, { percent: true });
+  renderCompareLegend(series);
+  renderCompareCards(state.compareResults);
+  announce('Jämförelsedata har laddats');
+}
+
+function renderCompareLegend(series) {
+  const legend = el('compare-legend');
+  legend.replaceChildren();
+  series.forEach((item) => {
+    const entry = document.createElement('span');
+    const swatch = document.createElement('i');
+    swatch.style.backgroundColor = item.color;
+    entry.append(swatch, document.createTextNode(item.name));
+    legend.append(entry);
+  });
+}
+
+function renderCompareCards(results) {
+  const container = el('compare-list');
+  container.replaceChildren();
+  results.forEach((result, index) => {
+    const card = document.createElement('article');
+    card.className = 'card fund-row-card';
+    const color = document.createElement('i');
+    color.className = 'fund-color';
+    color.style.backgroundColor = chartColors[index];
+    const text = document.createElement('div');
+    const name = document.createElement('h2');
+    name.textContent = result.fund.name;
+    const meta = document.createElement('p');
+    meta.textContent = `${result.fund.symbol} · ${formatDate(result.latest.asOf)}`;
+    text.append(name, meta);
+    const change = document.createElement('strong');
+    change.textContent = formatPercent(result.period.changePct);
+    change.className = result.period.changePct >= 0 ? 'positive' : 'negative';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'close-button small';
+    remove.setAttribute('aria-label', `Ta bort ${result.fund.name} från jämförelsen`);
+    remove.textContent = '×';
+    remove.addEventListener('click', () => { removeFromComparison(result.fund.symbol); renderComparison(); });
+    card.append(color, text, change, remove);
+    container.append(card);
+  });
+}
+
+function renderSaved() {
+  const favorites = getFavorites();
+  el('saved-empty').hidden = favorites.length > 0;
+  const container = el('saved-list');
+  container.replaceChildren();
+  favorites.forEach((fund) => {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'card saved-card';
+    const copy = document.createElement('span');
+    const name = document.createElement('strong');
+    name.textContent = fund.name;
+    const meta = document.createElement('span');
+    meta.textContent = [fund.isin, fund.symbol, fund.exchange].filter(Boolean).join(' · ');
+    const arrow = document.createElement('span');
+    arrow.textContent = '→';
+    arrow.setAttribute('aria-hidden', 'true');
+    copy.append(name, meta);
+    card.append(copy, arrow);
+    card.addEventListener('click', () => { setView('overview'); loadFund(fund); });
+    container.append(card);
+  });
+}
+
+function bindEvents() {
+  document.querySelectorAll('[data-view]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.view)));
+  document.querySelectorAll('[data-view-link]').forEach((button) => button.addEventListener('click', () => setView(button.dataset.viewLink)));
+  document.querySelectorAll('[data-open-search], #open-search').forEach((button) => button.addEventListener('click', openSearch));
+  el('close-search').addEventListener('click', () => el('search-dialog').close());
+  el('search-form').addEventListener('submit', (event) => event.preventDefault());
+  el('fund-search').addEventListener('input', (event) => {
+    clearTimeout(state.searchTimer);
+    state.searchTimer = setTimeout(() => runSearch(event.target.value), 300);
+  });
+  document.addEventListener('keydown', (event) => {
+    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') { event.preventDefault(); openSearch(); }
+  });
+  el('range-picker').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-range]');
+    if (!button || button.dataset.range === state.range) return;
+    state.range = button.dataset.range;
+    document.querySelectorAll('[data-range]').forEach((item) => item.classList.toggle('is-active', item === button));
+    loadFund(state.current);
+  });
+  el('compare-range').addEventListener('click', (event) => {
+    const button = event.target.closest('[data-compare-range]');
+    if (!button || button.dataset.compareRange === state.compareRange) return;
+    state.compareRange = button.dataset.compareRange;
+    document.querySelectorAll('[data-compare-range]').forEach((item) => item.classList.toggle('is-active', item === button));
+    renderComparison();
+  });
+  el('favorite-button').addEventListener('click', () => {
+    const added = toggleFavorite(state.current);
+    renderFund(state.fundResult);
+    showToast(added ? 'Fonden sparades på den här enheten.' : 'Fonden togs bort från sparade.');
+  });
+  el('compare-button').addEventListener('click', () => {
+    const result = addToComparison(state.current);
+    updateCounts();
+    if (result.added) showToast('Fonden lades till i jämförelsen.');
+    else if (result.reason === 'full') showToast('Jämförelsen har plats för högst tre fonder.');
+    else showToast('Fonden finns redan i jämförelsen.');
+  });
+  el('share-button').addEventListener('click', shareCurrentFund);
+  window.addEventListener('resize', () => {
+    if (state.view === 'overview' && state.fundResult) renderFund(state.fundResult);
+    if (state.view === 'compare' && state.compareResults.length) {
+      renderChart(el('compare-chart'), state.compareResults.map((result, index) => ({ name: result.fund.name, points: normaliseSeries(result.history), color: chartColors[index] })), { percent: true });
+    }
+  });
+  window.addEventListener('online', () => { setConnection('Ansluten', 'ready'); if (state.current) loadFund(state.current, { forceRefresh: true }); });
+  window.addEventListener('offline', () => setConnection('Offline', 'warning'));
+}
+
+async function shareCurrentFund() {
+  const payload = { title: state.current.name, text: `Se ${state.current.name} i Fondkoll`, url: location.href };
+  try {
+    if (navigator.share) await navigator.share(payload);
+    else { await navigator.clipboard.writeText(location.href); showToast('Länken kopierades.'); }
+  } catch (error) {
+    if (error.name !== 'AbortError') showToast('Länken kunde inte delas.');
   }
 }
 
 async function init() {
-  ui.setLoading(true);
-
-  try {
-    const { payload, stale, error } = await getHoldings();
-    state.holdingsPayload = payload;
-    ui.renderHoldingsMeta({ asOfDate: payload.asOfDate, source: payload.source, stale });
-    if (stale && error) {
-      ui.showErrorBanner(`Kunde inte hämta senaste innehav (${error}). Använder cachad data.`);
-    }
-
-    ui.setLoading(false);
-
-    if (!document.hidden) {
-      startPolling();
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    scheduleBackgroundRefresh((result) => {
-      state.holdingsPayload = result.payload;
-      ui.renderHoldingsMeta({ asOfDate: result.payload.asOfDate, source: result.payload.source, stale: result.stale });
-    });
-  } catch (err) {
-    // Whatever went wrong, never leave the user staring at an infinite
-    // skeleton - surface it and stop.
-    console.error('[app] init failed', err);
-    ui.setLoading(false);
-    ui.showFatalError(`Appen kunde inte starta: ${err.message}`);
-  }
+  bindEvents();
+  updateCounts();
+  await loadFund(getRequestedFund());
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
 }
 
-document.addEventListener('DOMContentLoaded', init);
+init();

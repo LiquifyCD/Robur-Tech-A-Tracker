@@ -1,79 +1,214 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="sv">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Robur Technology A · Live-uppskattning</title>
-  <meta name="description" content="Realtidsuppskattning av Swedbank Robur Technology A baserat på fondens offentliggjorda innehav." />
-  <meta name="theme-color" content="#0b1020" />
-
-  <!-- PWA: lets "Add to Home Screen" launch as a standalone app (no address bar / search bar) -->
-  <link rel="manifest" href="./manifest.json" />
-  <link rel="icon" href="./icon-192.png" />
-  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Robur Tech A" />
-  <meta name="mobile-web-app-capable" content="yes" />
-
-  <link rel="stylesheet" href="./css/styles.css" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Fondkoll – följ och jämför fonder</title>
+  <meta name="description" content="Sök, följ och jämför fonder med tydliga källor, uppdateringstider och datakvalitet.">
+  <meta name="theme-color" content="#f6f8f4">
+  <meta name="color-scheme" content="light">
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Fondkoll">
+  <link rel="stylesheet" href="/css/styles.css">
 </head>
 <body>
-  <div id="app-root" aria-busy="true">
+  <a class="skip-link" href="#main-content">Hoppa till innehållet</a>
 
-    <header class="app-header">
-      <div class="header-title">
-        <h1>Swedbank Robur Technology A</h1>
-        <p class="subtitle">Live-uppskattning av dagens utveckling</p>
-      </div>
-      <div class="live-indicator">
-        <span id="live-dot" class="live-dot"></span>
-        <span id="live-label">Laddar…</span>
+  <div class="app-shell">
+    <header class="topbar">
+      <a class="brand" href="/" aria-label="Fondkoll startsida">
+        <span class="brand-mark" aria-hidden="true">F</span>
+        <span>
+          <strong>Fondkoll</strong>
+          <small>Fonder utan dimridåer</small>
+        </span>
+      </a>
+      <button id="open-search" class="search-trigger" type="button" aria-haspopup="dialog">
+        <span aria-hidden="true">⌕</span>
+        <span>Sök fond, symbol eller ISIN</span>
+        <kbd>⌘ K</kbd>
+      </button>
+      <div id="connection-status" class="connection-status" role="status">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span>Redo</span>
       </div>
     </header>
 
-    <div id="error-banner" class="error-banner" hidden role="alert"></div>
+    <nav class="app-nav" aria-label="Huvudmeny">
+      <button class="nav-item is-active" type="button" data-view="overview" aria-current="page">
+        <span class="nav-icon" aria-hidden="true">⌂</span><span>Översikt</span>
+      </button>
+      <button class="nav-item" type="button" data-view="compare">
+        <span class="nav-icon" aria-hidden="true">⇄</span><span>Jämför</span>
+        <span id="compare-count" class="count-badge" hidden>0</span>
+      </button>
+      <button class="nav-item" type="button" data-view="saved">
+        <span class="nav-icon" aria-hidden="true">♡</span><span>Sparade</span>
+      </button>
+      <button class="nav-item" type="button" data-view="about">
+        <span class="nav-icon" aria-hidden="true">i</span><span>Om datan</span>
+      </button>
+    </nav>
 
-    <main id="content" hidden>
+    <main id="main-content" class="main-content" tabindex="-1">
+      <div id="app-status" class="sr-only" role="status" aria-live="polite"></div>
+      <div id="error-banner" class="notice notice-error" role="alert" hidden></div>
 
-      <section class="card headline-card">
-        <div id="market-status" class="market-status">Kontrollerar marknadsstatus…</div>
-        <div id="headline-change" class="headline-change neutral">--%</div>
-        <p id="coverage-note" class="coverage-note">Baserat på fondens offentliggjorda innehav</p>
-      </section>
+      <section id="view-overview" class="view" data-view-panel="overview">
+        <div id="fund-loading" class="fund-skeleton" aria-label="Laddar fonddata" aria-busy="true">
+          <div class="skeleton skeleton-wide"></div>
+          <div class="skeleton skeleton-value"></div>
+          <div class="skeleton skeleton-chart"></div>
+        </div>
 
-      <section class="card chart-card">
-        <h2 class="card-title">Intradagsutveckling (uppskattad)</h2>
-        <canvas id="intraday-chart" class="intraday-chart" role="img" aria-label="Diagram över uppskattad utveckling under dagen"></canvas>
-      </section>
-
-      <section class="card contributors-card">
-        <h2 class="card-title">Största bidragsgivare idag</h2>
-        <div class="contributors-columns">
-          <div class="contributors-column">
-            <h3 class="contributors-heading positive">Vinnare</h3>
-            <ul id="gainers-list" class="contributors-list"></ul>
+        <div id="fund-content" hidden>
+          <div class="fund-heading">
+            <div>
+              <div class="eyebrow-row">
+                <span id="fund-type" class="eyebrow">Fond</span>
+                <span id="fund-freshness" class="quality-badge">Kontrollerar data</span>
+              </div>
+              <h1 id="fund-name">–</h1>
+              <p class="fund-identifiers">
+                <span id="fund-symbol">–</span>
+                <span aria-hidden="true">·</span>
+                <span id="fund-exchange">–</span>
+                <span id="fund-isin-wrap" hidden><span aria-hidden="true">·</span> ISIN <span id="fund-isin"></span></span>
+              </p>
+            </div>
+            <div class="fund-actions" aria-label="Fondåtgärder">
+              <button id="favorite-button" class="icon-button" type="button" aria-pressed="false">
+                <span aria-hidden="true">♡</span><span class="button-label">Spara</span>
+              </button>
+              <button id="compare-button" class="icon-button" type="button">
+                <span aria-hidden="true">＋</span><span class="button-label">Jämför</span>
+              </button>
+              <button id="share-button" class="icon-button" type="button">
+                <span aria-hidden="true">↗</span><span class="button-label">Dela</span>
+              </button>
+            </div>
           </div>
-          <div class="contributors-column">
-            <h3 class="contributors-heading negative">Förlorare</h3>
-            <ul id="losers-list" class="contributors-list"></ul>
-          </div>
+
+          <section class="hero-grid" aria-labelledby="latest-value-title">
+            <div class="card value-card">
+              <p id="latest-value-title" class="metric-label">Senast rapporterade fondvärde</p>
+              <div class="value-row">
+                <strong id="latest-value" class="latest-value">–</strong>
+                <span id="latest-currency" class="currency-label"></span>
+              </div>
+              <div class="change-row">
+                <span id="daily-change" class="change-pill neutral">–</span>
+                <span>sedan föregående rapporterade värde</span>
+              </div>
+              <dl class="source-strip">
+                <div><dt>Värdedatum</dt><dd id="value-date">–</dd></div>
+                <div><dt>Källa</dt><dd id="value-source">–</dd></div>
+                <div><dt>Status</dt><dd id="value-status">Fördröjd</dd></div>
+              </dl>
+            </div>
+
+            <aside class="card trust-card" aria-labelledby="trust-title">
+              <div class="trust-icon" aria-hidden="true">✓</div>
+              <div>
+                <h2 id="trust-title">Vet vad siffran betyder</h2>
+                <p>Detta är ett rapporterat dagligt fondvärde, inte en realtidskurs. Vi visar aldrig en beräkning som officiell NAV.</p>
+                <button class="text-button" type="button" data-view-link="about">Läs om källor och begränsningar →</button>
+              </div>
+            </aside>
+          </section>
+
+          <section class="card performance-card" aria-labelledby="performance-title">
+            <div class="card-header">
+              <div>
+                <p class="section-kicker">Historisk utveckling</p>
+                <h2 id="performance-title">Fondvärde över tid</h2>
+              </div>
+              <div id="range-picker" class="segmented-control" role="group" aria-label="Välj tidsperiod">
+                <button type="button" data-range="1mo">1M</button>
+                <button type="button" data-range="3mo">3M</button>
+                <button type="button" data-range="ytd">i år</button>
+                <button class="is-active" type="button" data-range="1y">1 år</button>
+                <button type="button" data-range="5y">5 år</button>
+                <button type="button" data-range="max">Max</button>
+              </div>
+            </div>
+            <div class="chart-wrap">
+              <canvas id="fund-chart" class="fund-chart" role="img" aria-describedby="chart-summary"></canvas>
+              <div id="chart-tooltip" class="chart-tooltip" hidden></div>
+            </div>
+            <p id="chart-summary" class="sr-only">Historiskt diagram laddas.</p>
+            <dl class="metrics-grid">
+              <div><dt>Periodens utveckling</dt><dd id="period-return">–</dd></div>
+              <div><dt>Högsta värde</dt><dd id="period-high">–</dd></div>
+              <div><dt>Lägsta värde</dt><dd id="period-low">–</dd></div>
+              <div><dt>Rapporterade datapunkter</dt><dd id="period-points">–</dd></div>
+            </dl>
+          </section>
+
+          <section class="card quality-card" aria-labelledby="quality-title">
+            <div>
+              <p class="section-kicker">Datakvalitet</p>
+              <h2 id="quality-title">Tydligt även när datan inte är det</h2>
+            </div>
+            <div class="quality-grid">
+              <div class="quality-item"><span class="quality-icon" aria-hidden="true">◷</span><div><strong>Daglig, fördröjd data</strong><p>Fonder prissätts normalt en gång per bankdag. Helger och marknadshelger ger naturliga luckor.</p></div></div>
+              <div class="quality-item"><span class="quality-icon" aria-hidden="true">◎</span><div><strong>Ingen interpolering</strong><p>Saknade värden hoppas över. Vi fyller aldrig luckor med påhittade kurser.</p></div></div>
+              <div class="quality-item"><span class="quality-icon" aria-hidden="true">!</span><div><strong>Verifiera före beslut</strong><p>Datakällan är inofficiell. Kontrollera alltid fondbolagets officiella NAV.</p></div></div>
+            </div>
+          </section>
         </div>
       </section>
 
-      <footer class="app-footer">
-        <p id="holdings-date-note" class="footer-note">Innehav: laddar…</p>
-        <p id="last-update" class="footer-note">Senast uppdaterad: --</p>
-        <p class="disclaimer">
-          Uppskattning baserad på fondens offentliggjorda toppinnehav (ej hela portföljen) och
-          marknadsdata från tredje part. Ingen rådgivning, ingen garanti för korrekthet. Den
-          officiella NAV-kursen från fondbolaget gäller alltid.
-        </p>
-      </footer>
+      <section id="view-compare" class="view" data-view-panel="compare" hidden>
+        <div class="page-heading"><div><p class="section-kicker">Jämför</p><h1>Se fonder på samma skala</h1><p>Varje fond normaliseras till 0 % vid sitt första rapporterade värde i vald period.</p></div><button class="primary-button" type="button" data-open-search>Lägg till fond</button></div>
+        <div id="compare-empty" class="empty-state card"><span aria-hidden="true">⇄</span><h2>Inga fonder att jämföra ännu</h2><p>Lägg till upp till tre fonder från sökningen eller fondöversikten.</p><button class="primary-button" type="button" data-open-search>Sök fonder</button></div>
+        <div id="compare-content" hidden>
+          <section class="card performance-card">
+            <div class="card-header"><div><p class="section-kicker">Relativ utveckling</p><h2>Jämförelsediagram</h2></div><div id="compare-range" class="segmented-control" role="group" aria-label="Jämförelseperiod"><button type="button" data-compare-range="3mo">3M</button><button class="is-active" type="button" data-compare-range="1y">1 år</button><button type="button" data-compare-range="5y">5 år</button></div></div>
+            <div id="compare-legend" class="chart-legend"></div>
+            <div class="chart-wrap"><canvas id="compare-chart" class="fund-chart" role="img" aria-label="Jämförelse av fondutveckling"></canvas></div>
+          </section>
+          <div id="compare-list" class="fund-list"></div>
+        </div>
+      </section>
 
+      <section id="view-saved" class="view" data-view-panel="saved" hidden>
+        <div class="page-heading"><div><p class="section-kicker">Sparade</p><h1>Din bevakningslista</h1><p>Sparas endast lokalt på den här enheten. Ingen inloggning och ingen profilering.</p></div><button class="primary-button" type="button" data-open-search>Hitta en fond</button></div>
+        <div id="saved-empty" class="empty-state card"><span aria-hidden="true">♡</span><h2>Bevakningslistan är tom</h2><p>Spara fonder för att snabbt hitta tillbaka till dem.</p></div>
+        <div id="saved-list" class="fund-list"></div>
+      </section>
+
+      <section id="view-about" class="view" data-view-panel="about" hidden>
+        <div class="page-heading"><div><p class="section-kicker">Transparens</p><h1>Om datan</h1><p>En fondtjänst ska vara lika tydlig med begränsningar som med utveckling.</p></div></div>
+        <div class="article-grid">
+          <article class="card prose-card"><h2>Vad som visas</h2><p>Fondkoll visar historiska, rapporterade fondvärden som en tredjepartskälla märker som fonddata. Värdena är dagliga och kan publiceras med fördröjning. De är inte handelbara realtidskurser.</p><h2>Källa och täckning</h2><p>Fondnamn, sökresultat och värdehistorik hämtas från inofficiella Yahoo Finance-endpoints. De saknar garanterad tillgänglighet, täckning och stabilitet. Sökning fungerar med fondnamn, leverantörssymboler och ofta ISIN, men alla fonder finns inte hos källan.</p><h2>Valuta och avkastning</h2><p>Värden visas i den valuta som datakällan rapporterar. Periodavkastning beräknas från den första och sista faktiska datapunkten. Ingen valutakonvertering eller interpolering görs.</p></article>
+          <aside class="card limitations-card"><h2>Viktiga begränsningar</h2><ul><li>Kontrollera officiell NAV hos fondbolaget.</li><li>Historisk utveckling är ingen garanti.</li><li>Avgifter, utdelningar och andelsklasser kan påverka jämförelser.</li><li>Tjänsten ger information, inte finansiell rådgivning.</li></ul><h3>Integritet</h3><p>Sparade fonder lagras lokalt i webbläsaren. Sökfrågor skickas till vår server och vidare till dataleverantören; ingen användarprofil skapas av appen.</p></aside>
+        </div>
+      </section>
     </main>
   </div>
 
-  <script type="module" src="./js/app.js"></script>
+  <dialog id="search-dialog" class="search-dialog" aria-labelledby="search-title">
+    <div class="dialog-header">
+      <div><p class="section-kicker">Fondbibliotek</p><h2 id="search-title">Hitta en fond</h2></div>
+      <button id="close-search" class="close-button" type="button" aria-label="Stäng sökning">×</button>
+    </div>
+    <form id="search-form" class="search-form" role="search">
+      <label class="sr-only" for="fund-search">Fondnamn, symbol eller ISIN</label>
+      <span aria-hidden="true">⌕</span>
+      <input id="fund-search" name="q" type="search" autocomplete="off" maxlength="80" placeholder="Exempel: Robur Technology eller SE0000538944">
+      <span id="search-spinner" class="mini-spinner" hidden aria-label="Söker"></span>
+    </form>
+    <p id="search-help" class="search-help">Sök bland fonder hos dataleverantören. ISIN visas när det finns tillgängligt.</p>
+    <div id="search-results" class="search-results" role="listbox" aria-label="Sökresultat"></div>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <noscript><div class="noscript">Fondkoll behöver JavaScript för att hämta och visa fonddata.</div></noscript>
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>

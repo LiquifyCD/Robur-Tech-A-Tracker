@@ -1,184 +1,153 @@
-# Swedbank Robur Technology A — Live Tracker
+# Fondkoll
 
-A free, mobile-first web app that estimates the **intraday** performance of
-Swedbank Robur Technology A by tracking its disclosed underlying holdings in
-real time, instead of waiting for the official NAV (which only updates once
-a day).
+Fondkoll is a Swedish-language, mobile-first fund tracker for finding, following, and comparing mutual funds. It runs as a Cloudflare Worker with static assets, requires no client framework, and keeps personal watchlists on the user's device.
 
----
+## Product capabilities
 
-## ⚠️ Read this before you trust the numbers
+- Search by fund name, provider symbol, or ISIN when the provider recognises it.
+- Open shareable fund URLs such as `/?fund=0P00000LCG.ST`.
+- View the latest reported daily value, value date, currency, source, delay state, and freshness state.
+- Explore 1 month, 3 months, year-to-date, 1 year, 5 years, or the maximum available history.
+- Save a local watchlist without an account.
+- Compare up to three funds on a normalized percentage scale.
+- Continue to show explicitly stale cached fund data when the provider is unavailable.
+- Install the responsive web app on iPhone, iPad, Android, or desktop.
+- Navigate with keyboard landmarks, focus indicators, a skip link, live status messages, and reduced-motion support.
 
-This is an **estimate**, not a replication of the fund, for reasons that are
-structural, not a shortcut I took:
+## Accuracy model
 
-- **No free source publishes the fund's full live portfolio.** The best
-  public disclosure anywhere (Avanza, Nordnet, Morningstar, the fund
-  company itself) is a **top-holdings snapshot** — for this fund, the top
-  10 positions, refreshed roughly monthly, covering **~45-55% of assets**.
-  This app fetches that top-10 list automatically, normalizes those
-  weights to sum to 100% *so it can compute a %*, and always shows you the
-  real disclosed coverage so the number is never presented as more precise
-  than it is.
-- **Yahoo Finance has no official free API.** This app uses two of its
-  widely relied-upon but undocumented endpoints: `v8/finance/chart` for
-  live quotes, and `v10/finance/quoteSummary` (topHoldings module) for the
-  fund's disclosed top-10 holdings. Both can change shape, rate-limit, or
-  disappear without notice — that's why every layer here (client cache,
-  edge cache, exponential backoff, "stale" badges) exists. The
-  quoteSummary endpoint additionally requires a session cookie + "crumb"
-  token, fetched fresh on every cold request (see `getCookieAndCrumb` in
-  `functions/api/holdings.js`) — this is the single most likely thing to
-  break if Yahoo changes its anti-bot handshake again.
-- **Ticker symbols come directly from Yahoo**, since its topHoldings data
-  already reports each position's ticker alongside its name and weight —
-  no separate name→ticker mapping needed.
+Fondkoll deliberately separates three concepts:
 
-If you need the fund's actual daily NAV, always use the number your bank
-or Swedbank Robur itself publishes. This app is for watching the intraday
-direction, not for anything transactional.
+1. **Reported fund value** — a daily value supplied by the data provider. It is delayed and may be a NAV proxy, not a live tradable price.
+2. **Calculated return** — computed only from the first and last actual observations in the selected period.
+3. **Missing data** — omitted. The application never interpolates or invents prices, FX rates, or dates.
 
----
+Weekend and market-holiday gaps are expected for daily funds. Data is marked stale when the latest real observation is more than 120 hours old. A previously cached response is clearly labelled if a refresh fails.
+
+The previous top-holdings intraday estimate was removed from the primary experience. It normalized a partial portfolio, could not correctly represent undisclosed holdings or same-day currency movement, and depended on a brittle cookie/crumb handshake. Reported daily fund values are less immediate but materially more defensible.
+
+## Data provider and licensing assessment
+
+The current adapter uses Yahoo Finance's undocumented search and chart endpoints. They provide broad international mutual-fund coverage and require no app credential, but Yahoo does not publish a service-level agreement or stable public documentation for these endpoints. Availability, response shape, coverage, permitted use, and redistribution rights may change.
+
+Yahoo's published API terms restrict automated collection outside expressly permitted APIs and prohibit circumvention and excessive load. This project therefore:
+
+- requests only small JSON responses;
+- validates and limits query/symbol input;
+- filters results to mutual funds;
+- caches search and history responses at the edge for 15 minutes;
+- identifies the source and its unofficial status in both API responses and the interface;
+- does not scrape HTML, bypass authentication, or perform cookie/crumb circumvention;
+- recommends a licensed market-data agreement before public, commercial, or high-volume production use.
+
+Review the current [Yahoo API terms](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apitnc/index.html) before deployment. A production owner remains responsible for confirming that their use and jurisdiction are permitted.
+
+The application no longer performs FX conversion. Values stay in the reporting currency supplied by the fund-data source, avoiding false precision. If FX conversion is reintroduced, official reference rates such as the [ECB's daily information-only rates](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html) or a documented provider such as [Frankfurter](https://frankfurter.dev/) should be attributed and date-aligned with each fund observation.
 
 ## Architecture
 
-```
-index.html            Mobile-first UI shell
-css/styles.css         Dark theme, CSS variables, responsive layout
-manifest.json          Web app manifest — enables standalone (no browser
-                        chrome) launch when added to a phone's home screen
-icons/                 App icons used by manifest.json and iOS home-screen
-
-js/
-  app.js               Orchestration: polling loop, visibility handling,
-                        backoff. Imports everything else.
-  holdings.js           Client-side holdings cache + fetch orchestration
-  marketData.js          Live quote fetch + per-symbol caching + market-open check
-  calculator.js           Pure math: weighted-average estimate, gainers/losers
-  exchangeRates.js          FX conversion (USD/EUR/TWD → SEK)
-  chart.js                   Dependency-free canvas line chart
-  ui.js                        All DOM reads/writes
-  cache.js                      localStorage wrapper with TTL + stale-read support
+```text
+public/
+  index.html             Accessible application shell and four main views
+  css/styles.css         Design system, desktop/iPhone layouts, safe areas
+  js/app.js              Navigation, search, fund loading, watchlist, comparison
+  js/fundApi.js          Client API adapter with fresh/stale cache fallback
+  js/fundStore.js        Local-only watchlist, comparison, and last-fund state
+  js/format.js           Swedish date, percent, and currency presentation
+  js/chart.js            Dependency-free history and normalized comparison chart
+  js/cache.js            Namespaced localStorage TTL wrapper
+  sw.js                  Offline application-shell cache
+  manifest.json          Installable PWA metadata
 
 functions/api/
-  holdings.js    Handler logic: fetches disclosed top-10 holdings from
-                 Yahoo Finance's quoteSummary API, edge-caches 12h
-  quotes.js      Proxies Yahoo Finance per-symbol, edge-caches 10s
-  fx.js          Proxies Frankfurter (ECB rates), edge-caches 1h
+  funds.js               Validated mutual-fund discovery endpoint
+  fund.js                Validated historical fund-value endpoint and parser
 
-src/index.js
-  Worker entry point — routes /api/holdings, /api/quotes, /api/fx to the
-  handlers above and falls through to the static assets binding (public/)
-  for everything else. See the file's own header comment for why this
-  exists instead of relying on functions/ file-based routing directly.
+src/index.js             Worker routing, static assets, and security headers
+test/                    Data, calculation, date/currency, PWA, and UI contracts
+scripts/check.mjs        JavaScript syntax and JSON validation
 ```
 
-Data flow: `app.js` → `holdings.js` (portfolio) + `marketData.js` (prices) +
-`exchangeRates.js` (FX) → `calculator.js` (the math) → `ui.js` + `chart.js`
-(render). Nothing is hardcoded except the ticker-resolution lookup table
-described above — holdings, weights, prices, and FX all come from live
-fetches with cache fallbacks.
+The public API contract is provider-shaped at the edge and provider-neutral in the browser. The UI consumes normalized fields (`fund`, `latest`, `period`, `history`, and `source`) rather than Yahoo's response shape. A licensed provider can replace the two server-side adapters without rewriting the interface or local state.
 
----
+## API routes
 
-## Installing it on your phone (standalone mode)
+### `GET /api/funds?q=<query>`
 
-`manifest.json` + the iOS meta tags in `index.html` mean that when you add
-the page to your Home Screen, it opens as its own app — no address bar, no
-Safari search bar, no browser chrome.
+Returns up to 12 mutual-fund matches. Empty queries return a small featured list. Query length is capped at 80 characters.
 
-- **iPhone (Safari):** open the site → Share → **Add to Home Screen**.
-- **Android (Chrome):** open the site → ⋮ menu → **Add to Home screen** /
-  **Install app**.
+### `GET /api/fund?symbol=<symbol>&range=<range>`
 
-If you skip this step and just bookmark the page instead, the browser UI
-will still show — standalone mode only kicks in once it's launched from the
-home-screen icon.
+Returns normalized fund metadata, last reported value, period statistics, actual history points, and source metadata. Allowed ranges are `1mo`, `3mo`, `6mo`, `ytd`, `1y`, `2y`, `5y`, `10y`, and `max`. Symbols are validated against a restricted character set.
 
----
+Errors use JSON and do not expose secrets. Successful upstream responses are edge-cached for 15 minutes with a stale-if-error allowance.
 
-## Deploying it yourself (I can't push this live for you)
+## Local development
 
-This project is a **Workers project with static assets** (see
-`wrangler.jsonc`: `main: src/index.js` + an `assets` binding pointing at
-`public/`) — not a classic Cloudflare Pages project. It used to be plain
-Pages Functions, but that only works when the project is deployed *as a
-Pages project*; a plain Worker deploy ignores the `functions/` folder
-entirely, which caused `/api/holdings` and `/api/quotes` to 404. `src/index.js`
-now manually routes those three `/api/*` paths to the same handler logic
-that still lives in `functions/api/*.js`.
+Requirements: a current Node.js LTS release and npm.
 
-### Option A — Wrangler CLI (recommended)
-```bash
-npm install
-npx wrangler login
-npm run deploy
-```
-This deploys the Worker (static assets + API routes together) in one step.
-Your app will be live at `<project-name>.<your-subdomain>.workers.dev`.
-
-### Option B — Cloudflare dashboard + GitHub
-1. Push this folder to a GitHub repo.
-2. In the Cloudflare dashboard: **Workers & Pages → Create → Workers →
-   Connect to Git** (not "Pages" — this project's config is Worker-style,
-   so the Pages Git-integration flow won't pick up `wrangler.jsonc`'s
-   `main`/`assets` settings correctly).
-3. Point it at this repo/folder. Cloudflare will detect `package.json` and
-   `wrangler.jsonc`; there are no runtime dependencies to install.
-4. Deploy.
-
-### Local dev
 ```bash
 npm install
 npm run dev
 ```
-This runs Pages + Functions locally (via `wrangler pages dev`) so
-`/api/holdings`, `/api/quotes`, and `/api/fx` all work exactly as they will
-in production.
 
-No environment variables, API keys, or paid services are required — every
-upstream API used here (Frankfurter, and Yahoo's chart + quoteSummary
-endpoints) is free and keyless.
+Open the URL printed by Wrangler (normally `http://localhost:8787`). No environment variables, API keys, accounts, or paid services are required for the current adapter.
 
----
+## Verification
 
-## Performance notes
+```bash
+npm run check
+npm test
+npm run build
+```
 
-- No frameworks, no bundler, no build step — the entire client bundle is
-  the plain JS/CSS above, loaded as native ES modules.
-- All three API routes are cached at Cloudflare's edge (`caches.default`)
-  so concurrent visitors share responses instead of each triggering a
-  fresh upstream call.
-- The client additionally caches holdings (24h), quotes (10s), and FX
-  (1h) in `localStorage`, so a page reload doesn't re-fetch everything.
-- Polling pauses via the Page Visibility API whenever the tab is hidden,
-  and backs off exponentially (30s → 1m → 2m → capped at 5m) after
-  repeated upstream failures instead of retrying every 15s indefinitely.
-- **Deliberately low CPU-per-request:** the Workers **Free** plan caps CPU
-  time at ~10ms per request (waiting on `fetch()` doesn't count against
-  that, only actual code execution does). `holdings.js` used to
-  PDF-parse a factsheet server-side, which is real CPU work and could
-  exceed that budget; it now just reads a few fields off a small JSON
-  response instead, specifically to stay well inside the Free plan.
+Or run all gates:
 
----
+```bash
+npm run verify
+```
 
-## Extending it later
+The automated suite covers:
 
-The module boundaries were drawn with the roadmap in mind:
+- fund response parsing and missing-value handling;
+- daily and period return calculations;
+- stale-date classification;
+- Swedish date, percentage, and currency presentation;
+- normalized comparison series;
+- mutual-fund-only search normalization and deduplication;
+- responsive navigation, iPhone safe-area, reduced-motion, PWA, and security-header contracts.
 
-- **Multiple funds / comparisons** — `holdings.js` and `calculator.js`
-  already key everything off an ISIN parameter; add a fund switcher in
-  `ui.js` and a second entry in `functions/api/holdings.js`'s source
-  config.
-- **Historical estimated performance** — `chart.js` already timestamps
-  every point; swap its `sessionStorage` backing for `localStorage` (or a
-  Cloudflare KV-backed endpoint) to persist across days.
-- **PWA install** — done — see "Installing it on your phone" above.
-- **Dark mode / configurable refresh** — `styles.css` already isolates
-  every color in `:root` variables; `app.js`'s `REFRESH_INTERVAL_MS` is a
-  single constant to expose as a user setting.
-- **Push notifications on threshold crossings** — `calculator.js`'s
-  return value already has everything needed (`estimatedChangePct`); wire
-  it to the Notifications API or a Cloudflare Worker + Web Push in
-  `app.js`'s `refreshCycle()`.
+The UI has also been manually exercised with the local Worker at desktop size and at a 390 × 844 iPhone viewport: fund loading, dynamic search, selection of a second fund, shareable URL changes, local saving, two-fund comparison, mobile bottom navigation, and console-error checks.
+
+## Deployment
+
+The repository is configured as a Cloudflare Worker with a static-assets binding:
+
+```bash
+npm run deploy
+```
+
+Deployment changes external state and is intentionally not part of verification. Confirm the provider terms and Cloudflare account settings before deploying.
+
+## Security and privacy
+
+- A strict Content Security Policy limits scripts, styles, images, and connections to the same origin.
+- Framing, camera, microphone, geolocation, payment, and content-type sniffing are disabled or restricted.
+- Search and symbol inputs are length/character validated server-side.
+- No credentials or secrets are used or committed.
+- Favorites, comparison selections, and the most recent fund are stored only in browser `localStorage`.
+- Search text is sent to the Worker and then to the data provider; the app does not create a user profile.
+
+## Known limitations and next steps
+
+- A single unlicensed/undocumented provider remains the largest reliability and legal-risk constraint.
+- ISIN is displayed only when known locally; provider search may resolve an ISIN without returning it in the result metadata.
+- Fees, risk score, benchmark, holdings, sectors, regions, and official fund-company documents are not shown because the current source does not provide them under a reliable, documented contract.
+- Comparisons do not yet align share classes by fee, accumulation policy, hedging, or benchmark.
+- “Any fund” means any mutual fund covered by the configured provider, not every registered fund worldwide.
+
+The strongest next improvement is a licensed provider adapter that supplies stable ISIN metadata, official NAV dates, fees, risk, benchmark, and holdings. That decision may introduce credentials or cost and should be made by the repository owner before implementation.
+
+## Disclaimer
+
+Fondkoll is an informational software project, not financial advice. Verify all values, dates, fees, and fund identity with the fund company or distributor before making a financial decision.
