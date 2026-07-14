@@ -43,8 +43,9 @@ test('UI contract includes responsive navigation, safe areas, landmarks, and red
   assert.match(html, /id="contributors-section"/);
   assert.match(html, /id="daily-change"/);
   assert.match(html, /id="intraday-estimate-value"/);
-  assert.match(html, /Uppskattning sedan senaste NAV/);
-  assert.match(app, /inte uppräknad till 100 %/);
+  assert.match(html, /uppskattat sedan senaste NAV/);
+  assert.match(html, /class="change-row"[\s\S]*id="daily-change"[\s\S]*id="intraday-estimate-value"/);
+  assert.match(app, /inte uppräknat/);
   assert.match(app, /fördröjd marknadsdata/);
   assert.match(html, /Dagens vinnare/);
   assert.match(html, /Dagens förlorare/);

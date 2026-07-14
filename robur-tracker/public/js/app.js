@@ -109,7 +109,7 @@ async function loadFund(fund, options = {}) {
     state.current = metadata;
     setCurrentFund(metadata);
     renderFund(result);
-    loadContributors(metadata.symbol, result.data.latest.asOf, result.data.fund.currency, result.data.latest.dayChangePct, options);
+    loadContributors(metadata.symbol, metadata.isin, result.data.latest.asOf, result.data.fund.currency, result.data.latest.dayChangePct, options);
     updateUrl(metadata.symbol);
     setConnection(result.stale || result.data.latest.stale ? 'Visar äldre data' : 'Data hämtad', result.stale ? 'warning' : 'ready');
     if (result.stale) showError('Datakällan svarar inte. En tidigare sparad version visas och kan vara inaktuell.');
@@ -125,7 +125,7 @@ async function loadFund(fund, options = {}) {
   }
 }
 
-async function loadContributors(symbol, navAsOf, currency, officialNavChangePct, options = {}) {
+async function loadContributors(symbol, isin, navAsOf, currency, officialNavChangePct, options = {}) {
   const requestId = ++state.contributorsRequest;
   state.contributorsResult = null;
   el('contributors-loading').hidden = false;
@@ -136,7 +136,7 @@ async function loadContributors(symbol, navAsOf, currency, officialNavChangePct,
   setIntradayEstimateLoading();
 
   try {
-    const result = await getContributors(symbol, navAsOf, currency, options);
+    const result = await getContributors(symbol, navAsOf, currency, isin, options);
     if (requestId !== state.contributorsRequest || state.current?.symbol !== symbol) return;
     state.contributorsResult = result;
     renderContributors(result, officialNavChangePct);
@@ -163,8 +163,8 @@ function renderContributors(result, officialNavChangePct) {
   setContributionValue(el('positive-contribution'), data.summary.positivePctPoints);
   setContributionValue(el('negative-contribution'), data.summary.negativePctPoints);
   setContributionValue(el('net-contribution'), data.summary.netPctPoints);
-  el('contributors-coverage').textContent = `Beräknat ${formatUnsignedPercent(data.summary.calculatedCoveragePct)} av fonden · ${data.summary.availableCount}/${data.summary.holdingsCount} toppinnehav`;
-  el('contributors-updated').textContent = `Senaste kurs: ${formatDateTime(data.latestDataAt)}`;
+  el('contributors-coverage').textContent = `Beräknat ${formatUnsignedPercent(data.summary.calculatedCoveragePct)} · redovisat ${formatUnsignedPercent(data.summary.disclosedCoveragePct)} · saknas ${formatUnsignedPercent(data.summary.uncalculatedWeightPct)} · ${data.summary.availableCount}/${data.summary.holdingsCount} poster`;
+  el('contributors-updated').textContent = `Kurser: ${formatDateTime(data.latestDataAt)} · innehav: ${formatDate(data.holdingsAsOf)}`;
   el('contributors-source').textContent = `Källa: ${data.source.label} · fördröjd data`;
   renderIntradayEstimate(result, officialNavChangePct);
 
@@ -178,9 +178,9 @@ function renderContributors(result, officialNavChangePct) {
 function setIntradayEstimateLoading() {
   const container = el('intraday-estimate');
   container.dataset.state = 'loading';
-  el('intraday-estimate-label').textContent = 'Uppskattning sedan senaste NAV';
-  el('intraday-estimate-value').textContent = 'Beräknar…';
-  el('intraday-estimate-value').className = 'neutral';
+  el('intraday-estimate-label').textContent = 'uppskattat sedan senaste NAV';
+  el('intraday-estimate-value').textContent = '–';
+  el('intraday-estimate-value').className = 'change-pill neutral';
   el('intraday-estimate-coverage').textContent = 'Hämtar innehav, kurser och valutadata.';
   el('intraday-estimate-details').textContent = '';
 }
@@ -197,21 +197,23 @@ function renderIntradayEstimate(result, officialNavChangePct) {
 
   container.dataset.state = stale ? 'warning' : 'ready';
   el('intraday-estimate-label').textContent = estimate.isPartial
-    ? 'Partiell uppskattning sedan senaste NAV'
-    : 'Uppskattning sedan senaste NAV';
+    ? 'partiellt uppskattat sedan senaste NAV'
+    : 'uppskattat sedan senaste NAV';
   value.textContent = formatPercent(estimate.estimatedChangePct);
-  value.className = estimate.estimatedChangePct > 0 ? 'positive' : estimate.estimatedChangePct < 0 ? 'negative' : 'neutral';
+  value.className = `change-pill ${estimate.estimatedChangePct > 0 ? 'positive' : estimate.estimatedChangePct < 0 ? 'negative' : 'neutral'}`;
   el('intraday-estimate-coverage').textContent = estimate.isPartial
-    ? `${formatUnsignedPercent(estimate.coveragePct)} av fonden beräknad · inte uppräknad till 100 %`
-    : `${formatUnsignedPercent(estimate.coveragePct)} av fonden beräknad`;
+    ? `${formatUnsignedPercent(estimate.coveragePct)} beräknat · ${formatUnsignedPercent(data.summary.disclosedCoveragePct)} redovisat · inte uppräknat`
+    : `${formatUnsignedPercent(estimate.coveragePct)} av fonden beräknat`;
   const warnings = [];
   if (stale) warnings.push('äldre cache');
   if (data.source?.delayed) warnings.push('fördröjd marknadsdata');
+  if (data.holdingsStale) warnings.push('äldre innehavslista');
   if (data.unavailable.length) warnings.push(`${data.unavailable.length} innehav utan användbar data`);
   if (data.summary.currencyAdjustedCount) warnings.push(`${data.summary.currencyAdjustedCount} valutajusterade`);
   el('intraday-estimate-details').textContent = [
     `Beräknad ${formatDateTime(data.calculatedAt)}`,
     `senaste marknadsdata ${formatDateTime(data.latestDataAt)}`,
+    `innehav ${formatDate(data.holdingsAsOf)}`,
     `NAV ${formatDate(data.baseline?.navAsOf)}`,
     ...warnings,
   ].join(' · ');
@@ -220,9 +222,9 @@ function renderIntradayEstimate(result, officialNavChangePct) {
 function renderIntradayEstimateError(message) {
   const container = el('intraday-estimate');
   container.dataset.state = 'warning';
-  el('intraday-estimate-label').textContent = 'Uppskattning sedan senaste NAV';
+  el('intraday-estimate-label').textContent = 'uppskattat sedan senaste NAV';
   el('intraday-estimate-value').textContent = 'Saknas';
-  el('intraday-estimate-value').className = 'neutral';
+  el('intraday-estimate-value').className = 'change-pill neutral';
   el('intraday-estimate-coverage').textContent = message;
   el('intraday-estimate-details').textContent = 'Senast rapporterade NAV ovan påverkas inte.';
 }

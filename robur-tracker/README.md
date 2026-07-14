@@ -31,21 +31,21 @@ The holdings contribution panel is deliberately secondary to the reported fund v
 
 ## Data provider and licensing assessment
 
-The current adapter uses Yahoo Finance's undocumented search and chart endpoints. They provide broad international mutual-fund coverage and require no app credential, but Yahoo does not publish a service-level agreement or stable public documentation for these endpoints. Availability, response shape, coverage, permitted use, and redistribution rights may change.
+For funds with a known Swedbank Robur ISIN, holdings come from the public data integration used by [Swedbank Robur's official fund list](https://swedbankrobur.fondlista.se/). It returns the disclosed portfolio and cash/other allocation with an update date. Market prices and FX changes still come from Yahoo Finance. Other funds fall back to Yahoo's top-holdings response. Neither integration provides a service-level agreement for this use, so response shapes and availability may change.
 
 Yahoo's published API terms restrict automated collection outside expressly permitted APIs and prohibit circumvention and excessive load. This project therefore:
 
-- requests only small JSON responses;
+- requests only the JSON needed for the selected fund;
 - validates and limits query/symbol input;
 - filters results to mutual funds;
 - caches search and history responses at the edge for 15 minutes;
 - identifies the source and its unofficial status in both API responses and the interface;
-- does not scrape HTML or use user credentials; the holdings endpoint does require Yahoo's public session cookie/crumb handshake and is therefore more brittle than the chart endpoint;
+- does not scrape HTML or use user credentials; the general-fund fallback requires Yahoo's public session cookie/crumb handshake and is therefore more brittle than the chart endpoint;
 - recommends a licensed market-data agreement before public, commercial, or high-volume production use.
 
 Review the current [Yahoo API terms](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apitnc/index.html) before deployment. A production owner remains responsible for confirming that their use and jurisdiction are permitted.
 
-The application no longer performs FX conversion. Values stay in the reporting currency supplied by the fund-data source, avoiding false precision. If FX conversion is reintroduced, official reference rates such as the [ECB's daily information-only rates](https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/index.en.html) or a documented provider such as [Frankfurter](https://frankfurter.dev/) should be attributed and date-aligned with each fund observation.
+Holding returns are converted into the fund currency with date-aligned Yahoo FX series. Missing or stale FX data excludes the affected holding instead of assuming a rate.
 
 ## Architecture
 
@@ -65,7 +65,7 @@ public/
 functions/api/
   funds.js               Validated mutual-fund discovery endpoint
   fund.js                Validated historical fund-value endpoint and parser
-  contributors.js        Top-holdings weights, daily quotes, contribution calculation
+  contributors.js        Official/fallback holdings, FX-adjusted quotes, contribution calculation
 
 src/index.js             Worker routing, static assets, and security headers
 test/                    Data, calculation, date/currency, PWA, and UI contracts
@@ -86,9 +86,9 @@ Returns normalized fund metadata, last reported value, period statistics, actual
 
 Errors use JSON and do not expose secrets. Successful upstream responses are edge-cached for 15 minutes with a stale-if-error allowance.
 
-### `GET /api/contributors?symbol=<symbol>&navAsOf=<ISO-date>&currency=<ISO-4217>`
+### `GET /api/contributors?symbol=<symbol>&navAsOf=<ISO-date>&currency=<ISO-4217>&isin=<optional-ISIN>`
 
-Returns disclosed top holdings with normalized weights, movement since the supplied latest NAV date, currency-adjusted contribution in percentage points, positive/negative/net summaries, coverage, source, and timestamps. A weight supplied as either `0.10` or `10` is normalized to 10%. Missing or stale holding/FX quotes remain explicit and are excluded. Partial coverage is never scaled to 100%. Holdings metadata is cached for 12 hours and the calculated response for 15 minutes.
+Returns disclosed holdings with normalized weights, movement since the supplied latest NAV date, currency-adjusted contribution in percentage points, positive/negative/net summaries, disclosed/calculated/missing coverage, source, and timestamps. A known Robur ISIN enables the official disclosed portfolio; otherwise the general top-holdings adapter is used. Missing, stale, private, cash/other, or unmatched positions remain explicit and are excluded. Partial coverage is never scaled to 100%. Holdings metadata is cached for 12 hours and the calculated response for 15 minutes.
 
 ## Local development
 
@@ -122,7 +122,7 @@ The automated suite covers:
 - stale-date classification;
 - Swedish date, percentage, and currency presentation;
 - normalized comparison series;
-- holding-weight normalization, contribution arithmetic, sorting, coverage, and missing-data preservation;
+- holding-weight normalization, duplicate prevention, cash/non-equity handling, contribution arithmetic, full/partial coverage, stale holdings, missing prices/FX, and missing-data preservation;
 - mutual-fund-only search normalization and deduplication;
 - responsive navigation, iPhone safe-area, reduced-motion, PWA, and security-header contracts.
 

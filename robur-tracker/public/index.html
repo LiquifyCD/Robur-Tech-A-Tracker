@@ -95,16 +95,18 @@
                 <span id="latest-currency" class="currency-label"></span>
               </div>
               <div class="change-row">
-                <span id="daily-change" class="change-pill neutral">–</span>
-                <span>sedan föregående rapporterade värde</span>
-              </div>
-              <div id="intraday-estimate" class="intraday-estimate" data-state="loading" aria-live="polite">
-                <div class="intraday-estimate-heading">
-                  <p id="intraday-estimate-label">Uppskattning sedan senaste NAV</p>
-                  <strong id="intraday-estimate-value" class="neutral">Beräknar…</strong>
+                <div class="change-line official-change">
+                  <span id="daily-change" class="change-pill neutral">–</span>
+                  <span>officiellt sedan föregående rapporterade värde</span>
                 </div>
-                <p id="intraday-estimate-coverage">Hämtar innehav, kurser och valutadata.</p>
-                <p id="intraday-estimate-details"></p>
+                <div id="intraday-estimate" class="change-line intraday-estimate" data-state="loading" aria-live="polite">
+                  <span id="intraday-estimate-value" class="change-pill neutral">–</span>
+                  <span class="change-copy">
+                    <span id="intraday-estimate-label">uppskattat sedan senaste NAV</span>
+                    <small id="intraday-estimate-coverage">Hämtar innehav, kurser och valutadata.</small>
+                    <small id="intraday-estimate-details"></small>
+                  </span>
+                </div>
               </div>
               <dl class="source-strip">
                 <div><dt>Värdedatum</dt><dd id="value-date">–</dd></div>
@@ -128,7 +130,7 @@
               <div>
                 <p class="section-kicker">Portföljens dagsbidrag</p>
                 <h2 id="contributors-title">Dagens vinnare och förlorare</h2>
-                <p class="section-intro">Visar hur de redovisade toppinnehaven uppskattas ha påverkat fonden sedan senaste NAV.</p>
+                <p class="section-intro">Visar hur de redovisade innehaven uppskattas ha påverkat fonden sedan senaste NAV.</p>
               </div>
               <span id="contributors-status" class="quality-badge">Hämtar data</span>
             </div>
@@ -142,7 +144,7 @@
               <dl class="contribution-summary" aria-label="Sammanfattning av dagsbidrag">
                 <div><dt>Positiva bidrag</dt><dd id="positive-contribution" class="positive">–</dd></div>
                 <div><dt>Negativa bidrag</dt><dd id="negative-contribution" class="negative">–</dd></div>
-                <div><dt>Netto, toppinnehav</dt><dd id="net-contribution">–</dd></div>
+                <div><dt>Netto, beräknat</dt><dd id="net-contribution">–</dd></div>
               </dl>
 
               <div class="contributors-meta">
@@ -170,7 +172,7 @@
               <aside class="contribution-explainer">
                 <strong>Så räknas bidraget</strong>
                 <p>Kursförändring mäts från senaste NAV-datumet. För utländska innehav räknas även valutans förändring mot fondvalutan in. Fondvikt är innehavets redovisade andel. Bidrag i procentenheter = valutajusterad förändring × fondvikt / 100.</p>
-                <p>Detta är en partiell uppskattning för redovisade toppinnehav, inte officiell NAV. Saknad portföljandel räknas inte upp till 100 %. Handelstider, avgifter och övriga innehav kan ge en annan utveckling.</p>
+                <p>Detta är en uppskattning för redovisade innehav, inte officiell NAV. Saknad portföljandel räknas inte upp till 100 %. Handelstider, avgifter och övriga innehav kan ge en annan utveckling.</p>
               </aside>
             </div>
           </section>

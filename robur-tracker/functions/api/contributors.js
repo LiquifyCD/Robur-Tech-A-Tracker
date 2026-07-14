@@ -1,10 +1,60 @@
 const QUOTE_SUMMARY_URL = 'https://query1.finance.yahoo.com/v10/finance/quoteSummary/';
 const CHART_URL = 'https://query1.finance.yahoo.com/v8/finance/chart/';
+const ROBUR_HOLDINGS_URL = 'https://tmsapi.auxality.systems/dataaccess/RoburConnection/fundWithHoldings';
 const CACHE_TTL_SECONDS = 15 * 60;
 const HOLDINGS_CACHE_TTL_SECONDS = 12 * 60 * 60;
+const MAX_QUOTED_HOLDINGS = 44;
 const SAFE_SYMBOL = /^[A-Za-z0-9.^=_-]{1,32}$/;
+const SAFE_ISIN = /^[A-Z]{2}[A-Z0-9]{9}[0-9]$/;
 const USER_AGENT =
   'Mozilla/5.0 (compatible; FundScope/2.0; +https://github.com/LiquifyCD/Robur-Tech-A-Tracker)';
+
+const ROBUR_TICKERS = new Map(Object.entries({
+  'advanced micro devices inc': 'AMD',
+  'alphabet inc': 'GOOGL',
+  'amazon.com inc': 'AMZN',
+  'amphenol corp': 'APH',
+  'analog devices inc': 'ADI',
+  'apple inc': 'AAPL',
+  'applied materials inc': 'AMAT',
+  'arista networks inc': 'ANET',
+  'asml holding nv': 'ASML.AS',
+  'be semiconductor industries nv': 'BESI.AS',
+  'bentley systems inc': 'BSY',
+  'broadcom inc': 'AVGO',
+  'cadence design systems inc': 'CDNS',
+  'chroma ate inc': '2360.TW',
+  'cloudflare inc': 'NET',
+  'credo technology group holding ltd': 'CRDO',
+  'datadog inc': 'DDOG',
+  'delta electronics inc': '2308.TW',
+  'fortinet': 'FTNT',
+  'intel corp': 'INTC',
+  'keysight technologies inc': 'KEYS',
+  'kioxia holdings corp': '285A.T',
+  'kla-tencor corp': 'KLAC',
+  'lam research corp': 'LRCX',
+  'lumentum holdings inc': 'LITE',
+  'manhattan associates inc': 'MANH',
+  'marvell technology inc': 'MRVL',
+  'meta platforms inc': 'META',
+  'micron technology inc': 'MU',
+  'microsoft corp': 'MSFT',
+  'mongodb inc': 'MDB',
+  'motorola solutions inc': 'MSI',
+  'netflix inc': 'NFLX',
+  'nvidia corp': 'NVDA',
+  'oracle corp': 'ORCL',
+  'palantir technologies inc': 'PLTR',
+  'qualcomm inc': 'QCOM',
+  'rambus inc': 'RMBS',
+  'seagate technology plc': 'STX',
+  'servicenow': 'NOW',
+  'snowflake inc': 'SNOW',
+  'spotify technology s.a': 'SPOT',
+  'taiwan semiconductor manufacturing company, ltd.': '2330.TW',
+  'veeva systems inc': 'VEEV',
+}));
 
 export function normaliseWeightPct(value, formatted = null) {
   if (typeof formatted === 'string' && formatted.includes('%')) {
@@ -37,13 +87,69 @@ export function parseHoldings(payload) {
   const raw = payload?.quoteSummary?.result?.[0]?.topHoldings?.holdings;
   if (!Array.isArray(raw)) return [];
 
-  return raw
+  return dedupeHoldings(raw
     .map((holding) => ({
       name: String(holding?.holdingName || holding?.symbol || '').trim(),
       ticker: String(holding?.symbol || '').trim(),
       weightPct: normaliseWeightPct(holding?.holdingPercent?.raw, holding?.holdingPercent?.fmt),
     }))
-    .filter((holding) => holding.name && holding.ticker && holding.weightPct != null && holding.weightPct > 0);
+    .filter((holding) => holding.name && holding.ticker && holding.weightPct != null && holding.weightPct > 0));
+}
+
+export function isHoldingsStale(asOf, now = Date.now()) {
+  const timestamp = new Date(asOf).getTime();
+  return !Number.isFinite(timestamp) || now - timestamp > 45 * 24 * 60 * 60 * 1000;
+}
+
+export function parseRoburHoldings(payload, fundCurrency = 'SEK') {
+  const raw = Array.isArray(payload?.holdings) ? payload.holdings : [];
+  const equities = raw
+    .map((holding) => {
+      const name = String(holding?.name || '').trim();
+      const weightPct = officialWeightPct(holding?.weight);
+      return {
+        name,
+        ticker: ROBUR_TICKERS.get(normaliseName(name)) || null,
+        weightPct,
+        kind: 'equity',
+        country: holding?.country || null,
+      };
+    })
+    .filter((holding) => holding.name && holding.weightPct != null && holding.weightPct > 0);
+  const cashWeightPct = (payload?.sectors || [])
+    .filter((sector) => /kassa|bank account/i.test(`${sector?.sector_SE || ''} ${sector?.sector_EN || ''}`))
+    .reduce((sum, sector) => sum + (officialWeightPct(sector?.weight) || 0), 0);
+  if (cashWeightPct > 0) {
+    equities.push({
+      name: 'Kassa och övrigt',
+      ticker: `CASH:${fundCurrency}`,
+      weightPct: cashWeightPct,
+      kind: 'cash',
+      currency: fundCurrency,
+      country: null,
+    });
+  }
+  return dedupeHoldings(equities);
+}
+
+function officialWeightPct(value) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100 ? numeric : null;
+}
+
+export function dedupeHoldings(holdings) {
+  const unique = new Map();
+  for (const holding of holdings || []) {
+    const key = holding.ticker || normaliseName(holding.name);
+    if (!key) continue;
+    const current = unique.get(key);
+    if (!current || holding.weightPct > current.weightPct) unique.set(key, holding);
+  }
+  return [...unique.values()];
+}
+
+function normaliseName(value) {
+  return String(value || '').trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
 // Retained for the provider-adapter contract and previous-close unit coverage.
@@ -118,7 +224,7 @@ export function buildContributionSummary(holdings, quoteResults, metadata = {}, 
   const fundCurrency = metadata.fundCurrency || metadata.baseline?.currency || null;
 
   const items = holdings.map((holding) => {
-    const result = quotes.get(holding.ticker);
+    const result = quotes.get(holding.ticker || normaliseName(holding.name));
     const quote = result?.quote || result || null;
     if (!quote || !Number.isFinite(quote.dayChangePct)) {
       return {
@@ -242,6 +348,7 @@ export function buildContributionSummary(holdings, quoteResults, metadata = {}, 
       negativePctPoints,
       netPctPoints: stableNumber(positivePctPoints + negativePctPoints),
       disclosedCoveragePct,
+      undisclosedWeightPct: stableNumber(Math.max(0, 100 - disclosedCoveragePct)),
       calculatedCoveragePct,
       uncalculatedWeightPct: stableNumber(Math.max(0, 100 - calculatedCoveragePct)),
       isPartial: calculatedCoveragePct < 99.5,
@@ -259,27 +366,44 @@ export function buildContributionSummary(holdings, quoteResults, metadata = {}, 
 export async function onRequestGet({ request, ctx }) {
   const url = new URL(request.url);
   const symbol = (url.searchParams.get('symbol') || '').trim();
+  const isin = (url.searchParams.get('isin') || '').trim().toUpperCase();
   const navAsOf = (url.searchParams.get('navAsOf') || '').trim();
   const fundCurrency = (url.searchParams.get('currency') || '').trim().toUpperCase();
   if (!SAFE_SYMBOL.test(symbol)) return json({ error: 'A valid fund symbol is required.' }, 400);
+  if (isin && !SAFE_ISIN.test(isin)) return json({ error: 'A valid ISIN is required.' }, 400);
   if (!Number.isFinite(new Date(navAsOf).getTime())) return json({ error: 'A valid latest NAV date is required.' }, 400);
   if (!/^[A-Z]{3}$/.test(fundCurrency)) return json({ error: 'A valid three-letter fund currency is required.' }, 400);
 
   const cache = caches.default;
   const responseCacheKey = new Request(
-    `${url.origin}${url.pathname}?symbol=${encodeURIComponent(symbol)}&navAsOf=${encodeURIComponent(navAsOf)}&currency=${fundCurrency}`,
+    `${url.origin}${url.pathname}?symbol=${encodeURIComponent(symbol)}&isin=${encodeURIComponent(isin)}&navAsOf=${encodeURIComponent(navAsOf)}&currency=${fundCurrency}`,
     request
   );
   const cached = await cache.match(responseCacheKey);
   if (cached) return cached;
 
   try {
-    const holdingsPayload = await getHoldings(symbol, url.origin, cache, ctx);
+    const holdingsPayload = await getHoldings(symbol, isin, fundCurrency, url.origin, cache, ctx);
     if (!holdingsPayload.holdings.length) {
       return json({ error: 'Innehavsdata saknas för den här fonden.', code: 'HOLDINGS_UNAVAILABLE', symbol }, 404);
     }
 
+    const quotedTickers = new Set(holdingsPayload.holdings
+      .filter((holding) => holding.ticker && holding.kind !== 'cash')
+      .sort((a, b) => b.weightPct - a.weightPct)
+      .slice(0, MAX_QUOTED_HOLDINGS)
+      .map((holding) => holding.ticker));
     const settled = await Promise.all(holdingsPayload.holdings.map(async (holding) => {
+      if (!holding.ticker || holding.kind === 'cash') {
+        return [holding.ticker || normaliseName(holding.name), {
+          reason: holding.kind === 'cash'
+            ? 'Kassa och övrigt kan inte prissättas tillförlitligt som en enskild marknadsposition.'
+            : 'Innehavet saknar en entydig noterad ticker och ingår inte i uppskattningen.',
+        }];
+      }
+      if (!quotedTickers.has(holding.ticker)) {
+        return [holding.ticker, { reason: 'Innehavet ryms inte inom datakällans säkra anropsgräns och ingår inte i uppskattningen.' }];
+      }
       try {
         const quote = await fetchHoldingQuote(holding.ticker, symbol, navAsOf);
         return [holding.ticker, quote ? { quote } : { reason: 'Ingen användbar kurs hittades sedan senaste NAV.' }];
@@ -310,13 +434,14 @@ export async function onRequestGet({ request, ctx }) {
         fundCurrency,
         baseline: { navAsOf, currency: fundCurrency },
         holdingsAsOf: holdingsPayload.asOf,
+        holdingsStale: isHoldingsStale(holdingsPayload.asOf),
         holdingsFetchedAt: holdingsPayload.fetchedAt,
         calculatedAt: new Date().toISOString(),
         source: {
-          id: 'yahoo-finance-unofficial',
-          label: 'Yahoo Finance',
+          id: holdingsPayload.source.id,
+          label: holdingsPayload.source.label,
           delayed: true,
-          scope: 'Redovisade toppinnehav, inte hela fondportföljen',
+          scope: holdingsPayload.source.scope,
         },
       },
       new Map(fxSettled)
@@ -330,10 +455,40 @@ export async function onRequestGet({ request, ctx }) {
   }
 }
 
-async function getHoldings(symbol, origin, cache, ctx) {
-  const cacheKey = new Request(`${origin}/api/_holdings-cache?symbol=${encodeURIComponent(symbol)}`);
+async function getHoldings(symbol, isin, fundCurrency, origin, cache, ctx) {
+  const cacheKey = new Request(`${origin}/api/_holdings-cache?symbol=${encodeURIComponent(symbol)}&isin=${encodeURIComponent(isin)}`);
   const cached = await cache.match(cacheKey);
   if (cached) return cached.json();
+
+  if (isin) {
+    try {
+      const response = await fetch(`${ROBUR_HOLDINGS_URL}?isin=${encodeURIComponent(isin)}&total=1000`, {
+        headers: { Accept: 'application/json', 'User-Agent': USER_AGENT },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (response.ok) {
+        const data = await response.json();
+        const holdings = parseRoburHoldings(data, fundCurrency);
+        if (holdings.length) {
+          const payload = {
+            holdings,
+            asOf: data.updated || null,
+            fetchedAt: new Date().toISOString(),
+            source: {
+              id: 'swedbank-robur-holdings-yahoo-quotes',
+              label: 'Swedbank Robur (innehav) + Yahoo Finance (kurser)',
+              scope: 'Officiellt redovisade innehav och kassa/övrigt; ej uppräknat',
+            },
+          };
+          const cachedResponse = json(payload, 200, HOLDINGS_CACHE_TTL_SECONDS);
+          ctx?.waitUntil(cache.put(cacheKey, cachedResponse));
+          return payload;
+        }
+      }
+    } catch {
+      // The general adapter below keeps other funds usable if this source is unavailable.
+    }
+  }
 
   const { cookie, crumb } = await getCookieAndCrumb();
   const upstream = `${QUOTE_SUMMARY_URL}${encodeURIComponent(symbol)}?modules=topHoldings&crumb=${encodeURIComponent(crumb)}`;
@@ -344,7 +499,16 @@ async function getHoldings(symbol, origin, cache, ctx) {
   if (!response.ok) throw new Error(`Holdings provider returned ${response.status}`);
 
   const holdings = parseHoldings(await response.json());
-  const payload = { holdings, asOf: null, fetchedAt: new Date().toISOString() };
+  const payload = {
+    holdings,
+    asOf: null,
+    fetchedAt: new Date().toISOString(),
+    source: {
+      id: 'yahoo-finance-unofficial',
+      label: 'Yahoo Finance',
+      scope: 'Redovisade toppinnehav, inte hela fondportföljen',
+    },
+  };
   if (holdings.length) {
     const cachedResponse = json(payload, 200, HOLDINGS_CACHE_TTL_SECONDS);
     ctx?.waitUntil(cache.put(cacheKey, cachedResponse));

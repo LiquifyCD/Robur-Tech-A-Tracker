@@ -4,9 +4,12 @@ import {
   buildContributionSummary,
   calculateContribution,
   calculateCurrencyAdjustedChange,
+  dedupeHoldings,
+  isHoldingsStale,
   normaliseWeightPct,
   parseDailyQuote,
   parseHoldings,
+  parseRoburHoldings,
   parseQuoteSinceNav,
 } from '../functions/api/contributors.js';
 import { deriveIntradayEstimate } from '../public/js/intradayEstimate.js';
@@ -39,6 +42,46 @@ test('holdings parser preserves names, tickers, and normalized weights', () => {
     { ticker: 'AAA', name: 'Alpha', weightPct: 10 },
     { ticker: 'BBB', name: 'Beta', weightPct: 5 },
   ]);
+});
+
+test('official holdings preserve percentage weights and include disclosed cash without inventing a quote', () => {
+  const holdings = parseRoburHoldings({
+    holdings: [
+      { name: 'Broadcom Inc', weight: 7.5, country: 'US' },
+      { name: 'Space Exploration Technologies Corp', weight: 0.24, country: 'US' },
+    ],
+    sectors: [{ sector_SE: 'Kassa & Övrigt', weight: 0.8 }],
+  });
+  assert.deepEqual(holdings, [
+    { name: 'Broadcom Inc', ticker: 'AVGO', weightPct: 7.5, kind: 'equity', country: 'US' },
+    { name: 'Space Exploration Technologies Corp', ticker: null, weightPct: 0.24, kind: 'equity', country: 'US' },
+    { name: 'Kassa och övrigt', ticker: 'CASH:SEK', weightPct: 0.8, kind: 'cash', currency: 'SEK', country: null },
+  ]);
+  const result = buildContributionSummary(holdings, new Map([
+    ['AVGO', { quote: { dayChangePct: 1, currency: 'SEK', asOf: '2026-07-10T10:00:00Z', stale: false } }],
+    ['space exploration technologies corp', { reason: 'Ingen noterad kurs.' }],
+    ['CASH:SEK', { reason: 'Kassa och övrigt kan inte prissättas separat.' }],
+  ]), { fundCurrency: 'SEK' });
+  assert.equal(result.summary.disclosedCoveragePct, 8.54);
+  assert.equal(result.summary.calculatedCoveragePct, 7.5);
+  assert.deepEqual(result.unavailable.map((item) => item.kind), ['equity', 'cash']);
+});
+
+test('duplicate holdings do not inflate disclosed coverage', () => {
+  const holdings = dedupeHoldings([
+    { ticker: 'AAA', name: 'Alpha', weightPct: 10 },
+    { ticker: 'AAA', name: 'Alpha duplicate', weightPct: 10 },
+    { ticker: 'BBB', name: 'Beta', weightPct: 5 },
+  ]);
+  assert.equal(holdings.length, 2);
+  assert.equal(holdings.reduce((sum, holding) => sum + holding.weightPct, 0), 15);
+});
+
+test('holdings older than 45 days are explicitly stale', () => {
+  const now = new Date('2026-07-14T00:00:00Z').getTime();
+  assert.equal(isHoldingsStale('2026-06-30T00:00:00Z', now), false);
+  assert.equal(isHoldingsStale('2026-05-01T00:00:00Z', now), true);
+  assert.equal(isHoldingsStale('invalid', now), true);
 });
 
 test('daily quote uses current price and previous close with freshness metadata', () => {
@@ -123,6 +166,24 @@ test('partial estimate is not scaled and remains distinct from official NAV chan
   assert.equal(estimate.coveragePct, 39);
   assert.equal(estimate.isPartial, true);
   assert.equal(estimate.scaledToFullPortfolio, false);
+});
+
+test('complete quote coverage produces a full unscaled estimate', () => {
+  const holdings = [
+    { ticker: 'AAA', name: 'Alpha', weightPct: 60 },
+    { ticker: 'BBB', name: 'Beta', weightPct: 40 },
+  ];
+  const quotes = new Map([
+    ['AAA', { quote: { dayChangePct: 2, currency: 'SEK', asOf: '2026-07-10T10:00:00Z', stale: false } }],
+    ['BBB', { quote: { dayChangePct: -1, currency: 'SEK', asOf: '2026-07-10T10:00:00Z', stale: false } }],
+  ]);
+  const result = buildContributionSummary(holdings, quotes, { fundCurrency: 'SEK' });
+  assert.equal(result.summary.disclosedCoveragePct, 100);
+  assert.equal(result.summary.calculatedCoveragePct, 100);
+  assert.equal(result.summary.uncalculatedWeightPct, 0);
+  assert.equal(result.summary.undisclosedWeightPct, 0);
+  assert.equal(result.summary.isPartial, false);
+  assert.equal(result.summary.scaledToFullPortfolio, false);
 });
 
 test('summary sorts by actual fund contribution and preserves missing holdings', () => {

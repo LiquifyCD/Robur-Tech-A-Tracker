@@ -34,8 +34,8 @@ export async function getFund(symbol, range = '1y', options = {}) {
   }
 }
 
-export async function getContributors(symbol, navAsOf, currency, options = {}) {
-  const key = `contributors:${symbol}:${navAsOf}:${currency}`;
+export async function getContributors(symbol, navAsOf, currency, isin = '', options = {}) {
+  const key = `contributors:${symbol}:${isin}:${navAsOf}:${currency}`;
   if (!options.forceRefresh) {
     const fresh = cache.get(key);
     if (fresh && !fresh.stale) return { data: fresh.value, cached: true, stale: false };
@@ -43,6 +43,7 @@ export async function getContributors(symbol, navAsOf, currency, options = {}) {
 
   try {
     const params = new URLSearchParams({ symbol, navAsOf, currency });
+    if (isin) params.set('isin', isin);
     const data = await requestJson(`/api/contributors?${params}`);
     cache.set(key, data, FUND_TTL_MS);
     return { data, cached: false, stale: false };
