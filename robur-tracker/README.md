@@ -7,7 +7,7 @@ Fondkoll is a Swedish-language, mobile-first fund tracker for finding, following
 - Search by fund name, provider symbol, or ISIN when the provider recognises it.
 - Open shareable fund URLs such as `/?fund=0P00000LCG.ST`.
 - View the latest reported daily value, value date, currency, source, delay state, and freshness state.
-- See which disclosed top holdings contributed most positively and negatively during the day, including each holding's day move, fund weight, contribution in percentage points, data time, and missing-data state.
+- See a partial, currency-adjusted estimate since the latest NAV and which disclosed top holdings contributed most positively and negatively.
 - Explore 1 month, 3 months, year-to-date, 1 year, 5 years, or the maximum available history.
 - Save a local watchlist without an account.
 - Compare up to three funds on a normalized percentage scale.
@@ -27,7 +27,7 @@ Fondkoll deliberately separates three concepts:
 
 Weekend and market-holiday gaps are expected for daily funds. Data is marked stale when the latest real observation is more than 120 hours old. A previously cached response is clearly labelled if a refresh fails.
 
-The holdings contribution panel is deliberately secondary to the reported fund value. It estimates only the impact of disclosed top holdings using `day change % × fund weight % / 100`. It does not claim to reproduce official NAV: undisclosed holdings, currency movement, differing market hours, fees, and stale quotes can all create differences. Coverage, timestamps, delayed data, and unavailable holdings are shown rather than silently omitted.
+The holdings contribution panel is deliberately secondary to the reported fund value. Each holding is measured from the latest NAV date. Foreign holdings compound the local asset return with a matching currency-pair return into the fund currency before applying `adjusted change % × fund weight % / 100`. The result is never scaled to compensate for undisclosed or unavailable holdings and does not claim to reproduce official NAV. Coverage, timestamps, delayed data, FX adjustments, and unavailable holdings are explicit.
 
 ## Data provider and licensing assessment
 
@@ -86,9 +86,9 @@ Returns normalized fund metadata, last reported value, period statistics, actual
 
 Errors use JSON and do not expose secrets. Successful upstream responses are edge-cached for 15 minutes with a stale-if-error allowance.
 
-### `GET /api/contributors?symbol=<symbol>`
+### `GET /api/contributors?symbol=<symbol>&navAsOf=<ISO-date>&currency=<ISO-4217>`
 
-Returns disclosed top holdings with normalized percentage weights, daily price movement, estimated contribution in percentage points, positive/negative/net summaries, coverage, source, and timestamps. A weight supplied as either `0.10` or `10` is normalized to 10%. Missing or stale holding quotes remain explicit in the response. Holdings metadata is cached for 12 hours and the calculated response for 15 minutes.
+Returns disclosed top holdings with normalized weights, movement since the supplied latest NAV date, currency-adjusted contribution in percentage points, positive/negative/net summaries, coverage, source, and timestamps. A weight supplied as either `0.10` or `10` is normalized to 10%. Missing or stale holding/FX quotes remain explicit and are excluded. Partial coverage is never scaled to 100%. Holdings metadata is cached for 12 hours and the calculated response for 15 minutes.
 
 ## Local development
 

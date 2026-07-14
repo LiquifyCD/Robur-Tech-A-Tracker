@@ -11,6 +11,7 @@ import {
 } from './fundStore.js';
 import { getChartColors, normaliseSeries, renderChart } from './chart.js';
 import { formatDate, formatDateTime, formatPctPoints, formatPercent, formatUnsignedPercent, formatValue, freshnessLabel, rangeLabel } from './format.js';
+import { deriveIntradayEstimate } from './intradayEstimate.js';
 
 const DEFAULT_FUND = {
   symbol: '0P00000LCG.ST',
@@ -108,7 +109,7 @@ async function loadFund(fund, options = {}) {
     state.current = metadata;
     setCurrentFund(metadata);
     renderFund(result);
-    loadContributors(metadata.symbol, options);
+    loadContributors(metadata.symbol, result.data.latest.asOf, result.data.fund.currency, result.data.latest.dayChangePct, options);
     updateUrl(metadata.symbol);
     setConnection(result.stale || result.data.latest.stale ? 'Visar äldre data' : 'Data hämtad', result.stale ? 'warning' : 'ready');
     if (result.stale) showError('Datakällan svarar inte. En tidigare sparad version visas och kan vara inaktuell.');
@@ -124,7 +125,7 @@ async function loadFund(fund, options = {}) {
   }
 }
 
-async function loadContributors(symbol, options = {}) {
+async function loadContributors(symbol, navAsOf, currency, officialNavChangePct, options = {}) {
   const requestId = ++state.contributorsRequest;
   state.contributorsResult = null;
   el('contributors-loading').hidden = false;
@@ -132,24 +133,26 @@ async function loadContributors(symbol, options = {}) {
   el('contributors-unavailable').hidden = true;
   el('contributors-status').textContent = 'Hämtar data';
   el('contributors-status').classList.remove('is-stale');
+  setIntradayEstimateLoading();
 
   try {
-    const result = await getContributors(symbol, options);
+    const result = await getContributors(symbol, navAsOf, currency, options);
     if (requestId !== state.contributorsRequest || state.current?.symbol !== symbol) return;
     state.contributorsResult = result;
-    renderContributors(result);
+    renderContributors(result, officialNavChangePct);
   } catch (error) {
     if (requestId !== state.contributorsRequest || state.current?.symbol !== symbol) return;
     el('contributors-unavailable').textContent = `Innehavens dagsbidrag kan inte visas just nu: ${error.message}`;
     el('contributors-unavailable').hidden = false;
     el('contributors-status').textContent = 'Data saknas';
     el('contributors-status').classList.add('is-stale');
+    renderIntradayEstimateError(error.message);
   } finally {
     if (requestId === state.contributorsRequest) el('contributors-loading').hidden = true;
   }
 }
 
-function renderContributors(result) {
+function renderContributors(result, officialNavChangePct) {
   const { data, stale } = result;
   const delayedItems = data.items.filter((item) => item.status === 'stale').length;
   const hasWarnings = stale || delayedItems > 0 || data.unavailable.length > 0;
@@ -163,12 +166,65 @@ function renderContributors(result) {
   el('contributors-coverage').textContent = `Beräknat ${formatUnsignedPercent(data.summary.calculatedCoveragePct)} av fonden · ${data.summary.availableCount}/${data.summary.holdingsCount} toppinnehav`;
   el('contributors-updated').textContent = `Senaste kurs: ${formatDateTime(data.latestDataAt)}`;
   el('contributors-source').textContent = `Källa: ${data.source.label} · fördröjd data`;
+  renderIntradayEstimate(result, officialNavChangePct);
 
   renderContributorList(el('winners-list'), data.winners, 'Inga positiva bidrag i tillgänglig dagsdata.');
   renderContributorList(el('losers-list'), data.losers, 'Inga negativa bidrag i tillgänglig dagsdata.');
   const unavailableSection = el('unavailable-holdings');
   unavailableSection.hidden = data.unavailable.length === 0;
   renderContributorList(el('unavailable-list'), data.unavailable, '', true);
+}
+
+function setIntradayEstimateLoading() {
+  const container = el('intraday-estimate');
+  container.dataset.state = 'loading';
+  el('intraday-estimate-label').textContent = 'Uppskattning sedan senaste NAV';
+  el('intraday-estimate-value').textContent = 'Beräknar…';
+  el('intraday-estimate-value').className = 'neutral';
+  el('intraday-estimate-coverage').textContent = 'Hämtar innehav, kurser och valutadata.';
+  el('intraday-estimate-details').textContent = '';
+}
+
+function renderIntradayEstimate(result, officialNavChangePct) {
+  const { data, stale } = result;
+  const estimate = deriveIntradayEstimate(data.summary, officialNavChangePct);
+  const value = el('intraday-estimate-value');
+  const container = el('intraday-estimate');
+  if (!estimate.hasEstimate) {
+    renderIntradayEstimateError('Ingen tillräckligt aktuell och valutajusterad innehavsdata kunde beräknas.');
+    return;
+  }
+
+  container.dataset.state = stale ? 'warning' : 'ready';
+  el('intraday-estimate-label').textContent = estimate.isPartial
+    ? 'Partiell uppskattning sedan senaste NAV'
+    : 'Uppskattning sedan senaste NAV';
+  value.textContent = formatPercent(estimate.estimatedChangePct);
+  value.className = estimate.estimatedChangePct > 0 ? 'positive' : estimate.estimatedChangePct < 0 ? 'negative' : 'neutral';
+  el('intraday-estimate-coverage').textContent = estimate.isPartial
+    ? `${formatUnsignedPercent(estimate.coveragePct)} av fonden beräknad · inte uppräknad till 100 %`
+    : `${formatUnsignedPercent(estimate.coveragePct)} av fonden beräknad`;
+  const warnings = [];
+  if (stale) warnings.push('äldre cache');
+  if (data.source?.delayed) warnings.push('fördröjd marknadsdata');
+  if (data.unavailable.length) warnings.push(`${data.unavailable.length} innehav utan användbar data`);
+  if (data.summary.currencyAdjustedCount) warnings.push(`${data.summary.currencyAdjustedCount} valutajusterade`);
+  el('intraday-estimate-details').textContent = [
+    `Beräknad ${formatDateTime(data.calculatedAt)}`,
+    `senaste marknadsdata ${formatDateTime(data.latestDataAt)}`,
+    `NAV ${formatDate(data.baseline?.navAsOf)}`,
+    ...warnings,
+  ].join(' · ');
+}
+
+function renderIntradayEstimateError(message) {
+  const container = el('intraday-estimate');
+  container.dataset.state = 'warning';
+  el('intraday-estimate-label').textContent = 'Uppskattning sedan senaste NAV';
+  el('intraday-estimate-value').textContent = 'Saknas';
+  el('intraday-estimate-value').className = 'neutral';
+  el('intraday-estimate-coverage').textContent = message;
+  el('intraday-estimate-details').textContent = 'Senast rapporterade NAV ovan påverkas inte.';
 }
 
 function setContributionValue(element, value) {
@@ -202,7 +258,8 @@ function renderContributorList(container, items, emptyMessage, unavailable = fal
 
     const metrics = document.createElement('dl');
     metrics.className = 'contributor-metrics';
-    appendMetric(metrics, 'Dag', unavailable ? 'Saknas' : formatPercent(item.dayChangePct));
+    appendMetric(metrics, 'Kurs', Number.isFinite(item.localDayChangePct) ? formatPercent(item.localDayChangePct) : 'Saknas');
+    appendMetric(metrics, 'Valuta', item.fxPair ? (Number.isFinite(item.fxChangePct) ? formatPercent(item.fxChangePct) : 'Saknas') : '–');
     appendMetric(metrics, 'Fondvikt', formatUnsignedPercent(item.weightPct));
     appendMetric(metrics, 'Bidrag', unavailable ? 'Ej beräknat' : formatPctPoints(item.contributionPctPoints));
     row.append(identity, metrics);

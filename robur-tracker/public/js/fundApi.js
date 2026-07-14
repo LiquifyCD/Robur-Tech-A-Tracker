@@ -5,7 +5,7 @@ const FUND_TTL_MS = 15 * 60 * 1000;
 async function requestJson(url) {
   const response = await fetch(url, {
     headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(12_000),
+    signal: AbortSignal.timeout(18_000),
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(body.detail || body.error || `Request failed (${response.status})`);
@@ -34,15 +34,16 @@ export async function getFund(symbol, range = '1y', options = {}) {
   }
 }
 
-export async function getContributors(symbol, options = {}) {
-  const key = `contributors:${symbol}`;
+export async function getContributors(symbol, navAsOf, currency, options = {}) {
+  const key = `contributors:${symbol}:${navAsOf}:${currency}`;
   if (!options.forceRefresh) {
     const fresh = cache.get(key);
     if (fresh && !fresh.stale) return { data: fresh.value, cached: true, stale: false };
   }
 
   try {
-    const data = await requestJson(`/api/contributors?symbol=${encodeURIComponent(symbol)}`);
+    const params = new URLSearchParams({ symbol, navAsOf, currency });
+    const data = await requestJson(`/api/contributors?${params}`);
     cache.set(key, data, FUND_TTL_MS);
     return { data, cached: false, stale: false };
   } catch (error) {
