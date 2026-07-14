@@ -98,6 +98,14 @@
                 <span id="daily-change" class="change-pill neutral">–</span>
                 <span>sedan föregående rapporterade värde</span>
               </div>
+              <div id="intraday-estimate" class="intraday-estimate" data-state="loading" aria-live="polite">
+                <div class="intraday-estimate-heading">
+                  <p id="intraday-estimate-label">Uppskattning sedan senaste NAV</p>
+                  <strong id="intraday-estimate-value" class="neutral">Beräknar…</strong>
+                </div>
+                <p id="intraday-estimate-coverage">Hämtar innehav, kurser och valutadata.</p>
+                <p id="intraday-estimate-details"></p>
+              </div>
               <dl class="source-strip">
                 <div><dt>Värdedatum</dt><dd id="value-date">–</dd></div>
                 <div><dt>Källa</dt><dd id="value-source">–</dd></div>
@@ -120,7 +128,7 @@
               <div>
                 <p class="section-kicker">Portföljens dagsbidrag</p>
                 <h2 id="contributors-title">Dagens vinnare och förlorare</h2>
-                <p class="section-intro">Visar hur de redovisade toppinnehaven uppskattas ha påverkat fonden i dag.</p>
+                <p class="section-intro">Visar hur de redovisade toppinnehaven uppskattas ha påverkat fonden sedan senaste NAV.</p>
               </div>
               <span id="contributors-status" class="quality-badge">Hämtar data</span>
             </div>
@@ -161,8 +169,8 @@
 
               <aside class="contribution-explainer">
                 <strong>Så räknas bidraget</strong>
-                <p>Prisförändring är aktiens förändring i dag. Fondvikt är innehavets redovisade andel av fonden. Bidrag i procentenheter = prisförändring × fondvikt / 100. Exempel: +4 % × 10 % = +0,40 pp.</p>
-                <p>Detta är en uppskattning för redovisade toppinnehav, inte fondens officiella dagsavkastning. Valuta, handelstider, avgifter och övriga innehav kan ge en annan utveckling.</p>
+                <p>Kursförändring mäts från senaste NAV-datumet. För utländska innehav räknas även valutans förändring mot fondvalutan in. Fondvikt är innehavets redovisade andel. Bidrag i procentenheter = valutajusterad förändring × fondvikt / 100.</p>
+                <p>Detta är en partiell uppskattning för redovisade toppinnehav, inte officiell NAV. Saknad portföljandel räknas inte upp till 100 %. Handelstider, avgifter och övriga innehav kan ge en annan utveckling.</p>
               </aside>
             </div>
           </section>

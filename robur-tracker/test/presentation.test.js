@@ -27,6 +27,7 @@ test('comparison series start at zero and preserve real observations', () => {
 test('UI contract includes responsive navigation, safe areas, landmarks, and reduced motion', async () => {
   const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
   const css = await readFile(new URL('../public/css/styles.css', import.meta.url), 'utf8');
+  const app = await readFile(new URL('../public/js/app.js', import.meta.url), 'utf8');
   assert.match(html, /<nav[^>]+aria-label="Huvudmeny"/);
   assert.match(html, /<main id="main-content"/);
   assert.match(html, /role="status" aria-live="polite"/);
@@ -40,9 +41,14 @@ test('UI contract includes responsive navigation, safe areas, landmarks, and red
   assert.match(html, /content="light dark"/);
   assert.match(html, /theme-color[^>]+prefers-color-scheme: dark/);
   assert.match(html, /id="contributors-section"/);
+  assert.match(html, /id="daily-change"/);
+  assert.match(html, /id="intraday-estimate-value"/);
+  assert.match(html, /Uppskattning sedan senaste NAV/);
+  assert.match(app, /inte uppräknad till 100 %/);
+  assert.match(app, /fördröjd marknadsdata/);
   assert.match(html, /Dagens vinnare/);
   assert.match(html, /Dagens förlorare/);
-  assert.match(html, /prisförändring × fondvikt \/ 100/i);
+  assert.match(html, /valutajusterad förändring × fondvikt \/ 100/i);
   assert.match(html, /Innehav utan användbar dagsdata/);
   assert.doesNotMatch(html, /class="brand(?:-mark)?"/);
   assert.match(css, /\.icon-button \{[^}]*min-height: 44px/s);
