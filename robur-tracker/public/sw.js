@@ -1,5 +1,5 @@
-const CACHE_NAME = 'fondkoll-shell-v6';
-const APP_SHELL = ['/', '/css/styles.css', '/js/app.js', '/js/fundApi.js', '/js/fundStore.js', '/js/format.js', '/js/intradayEstimate.js', '/js/chart.js', '/icon.svg', '/manifest.json'];
+const CACHE_NAME = 'fondkoll-shell-v7';
+const APP_SHELL = ['/', '/css/styles.css', '/js/app.js', '/js/fundApi.js', '/js/fundStore.js', '/js/format.js', '/js/intradayEstimate.js', '/js/chart.js', '/icon.svg', '/apple-touch-icon.png?v=2', '/icon-192.png?v=2', '/icon-512.png?v=2', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));
